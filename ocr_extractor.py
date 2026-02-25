@@ -9,14 +9,26 @@ import numpy as np
 import pytesseract
 from PIL import Image
 from typing import Dict, Optional
+import platform
+import os
 
 
 class MedicalScanExtractor:
     """Extract patient data from CT scan dose report images"""
-    
+
     def __init__(self):
-        # Configure tesseract path for Windows (Tesseract OCR 5.5.0)
-        pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+        # Configure tesseract path based on platform
+        system = platform.system()
+        
+        if system == "Windows":
+            # Windows path (adjust if Tesseract is installed elsewhere)
+            pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+        elif system == "Linux":
+            # Linux path (standard installation path)
+            pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
+        elif system == "Darwin":  # macOS
+            pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+        # For other systems, pytesseract will use the default path
     
     def preprocess_image(self, image_path: str) -> np.ndarray:
         """
