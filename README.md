@@ -183,7 +183,7 @@ CMD ["streamlit", "run", "app.py"]
 ### OCR not working on Streamlit Cloud:
 - Ensure `apt-packages.txt` exists in your repository root
 - Check deployment logs for Tesseract installation errors
-- Verify `requirements.txt` includes `pytesseract`
+- Verify `requirements.txt` includes `pytesseract` and `opencv-python-headless`
 
 ### OCR not working locally:
 - Ensure Tesseract OCR is installed
