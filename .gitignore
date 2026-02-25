@@ -53,3 +53,4 @@ temp_*.png
 
 # Environment variables
 .env
+"*.png"  

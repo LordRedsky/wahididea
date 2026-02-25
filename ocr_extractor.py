@@ -53,6 +53,25 @@ class MedicalScanExtractor:
         denoised = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
 
         return denoised
+
+    def preprocess_image_alternative(self, image_path: str) -> np.ndarray:
+        """
+        Alternative preprocessing with adaptive thresholding
+        Better for images with varying lighting conditions
+        """
+        img = cv2.imread(image_path)
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        inverted = 255 - gray
+        
+        # Use adaptive thresholding instead of Otsu
+        adaptive = cv2.adaptiveThreshold(
+            inverted, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            11, 2
+        )
+        
+        return adaptive
     
     def extract_data(self, image_path: str) -> Dict[str, Optional[str]]:
         """
@@ -61,7 +80,7 @@ class MedicalScanExtractor:
         Returns:
             Dictionary with extracted fields
         """
-        # Preprocess image
+        # Preprocess image with primary method
         processed_img = self.preprocess_image(image_path)
 
         # Perform OCR with different configurations for better accuracy
@@ -82,11 +101,32 @@ class MedicalScanExtractor:
         # Use PSM 11 for Patient ID (better for sparse text fields)
         data_sparse = pytesseract.image_to_data(processed_img, config=config2, output_type=pytesseract.Output.DICT)
 
+        # Try alternative preprocessing for Patient ID (more robust across platforms)
+        try:
+            alt_img = self.preprocess_image_alternative(image_path)
+            alt_text_sparse = pytesseract.image_to_string(alt_img, config=config2)
+            alt_data_sparse = pytesseract.image_to_data(alt_img, config=config2, output_type=pytesseract.Output.DICT)
+            
+            # Combine with original sparse data
+            combined_text_for_id = combined_text + "\n" + alt_text_sparse
+            combined_data_sparse = {
+                'text': data_sparse['text'] + alt_data_sparse['text'],
+                'top': data_sparse['top'] + alt_data_sparse['top'],
+                'left': data_sparse['left'] + alt_data_sparse['left'],
+                'width': data_sparse['width'] + alt_data_sparse['width'],
+                'height': data_sparse['height'] + alt_data_sparse['height'],
+                'conf': data_sparse['conf'] + alt_data_sparse['conf'],
+            }
+        except Exception:
+            # Fallback to original if alternative fails
+            combined_text_for_id = combined_text
+            combined_data_sparse = data_sparse
+
         # Extract fields using multiple methods
         result = {
             'nama_pasien': self._extract_patient_name(combined_text, data),
             'tanggal_pemeriksaan': self._extract_exam_date(combined_text),
-            'id_pasien': self._extract_patient_id(combined_text, data_sparse),  # Use sparse data for ID
+            'id_pasien': self._extract_patient_id(combined_text_for_id, combined_data_sparse),  # Use enhanced data for ID
             'jenis_pemeriksaan': self._extract_exam_description(image_path, combined_text, data),
             'ctdi_vol': self._extract_ctdi_vol(combined_text, data),
             'total_dlp': self._extract_total_dlp(combined_text, data)
@@ -163,14 +203,16 @@ class MedicalScanExtractor:
         # OCR also misreads "Patient ID" as "Padiena vo", "Palbent ID", etc.
         patterns = [
             r'Patient\s*ID\s*:\s*(\d+)',
-            r'Patient\s*vo\s*:\s*(\d+)',  # OCR error: ID -> vo
-            r'Patient\s*lD\s*:\s*(\d+)',  # OCR error: ID -> lD
-            r'Patient\s*IO\s*:\s*(\d+)',  # OCR error: ID -> IO
-            r'Patient\s*lO\s*:\s*(\d+)',  # OCR error: ID -> lO
-            r'Padiena\s+vo\s*:\s*(\d+)',  # OCR error: Patient ID -> Padiena vo
-            r'Palbent\s*ID\s*:\s*(\d+)',  # OCR error: Patient -> Palbent
-            r'Palbent\s*vo\s*:\s*(\d+)',  # OCR error: Patient ID -> Palbent vo
-            r'Palhent\s*vo\s*:\s*(\d+)',  # OCR error: Patient ID -> Palhent vo
+            r'Patient\s*vo\s*:\s*(\d+)',           # OCR error: ID -> vo
+            r'Patient\s*lD\s*:\s*(\d+)',           # OCR error: ID -> lD
+            r'Patient\s*IO\s*:\s*(\d+)',           # OCR error: ID -> IO
+            r'Patient\s*lO\s*:\s*(\d+)',           # OCR error: ID -> lO
+            r'Padiena\s+vo\s*:\s*(\d+)',           # OCR error: Patient ID -> Padiena vo
+            r'Palbent\s*ID\s*:\s*(\d+)',           # OCR error: Patient -> Palbent
+            r'Palbent\s*vo\s*:\s*(\d+)',           # OCR error: Patient ID -> Palbent vo
+            r'Palhent\s*vo\s*:\s*(\d+)',           # OCR error: Patient ID -> Palhent vo
+            r'Patent\s+vo\s*:\s*(\d+)',            # OCR error: Patient -> Patent
+            r'Paoent\s+vo\s*:\s*(\d+)',            # OCR error: Patient -> Paoent
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
@@ -183,13 +225,12 @@ class MedicalScanExtractor:
             for i, word in enumerate(data.get('text', [])):
                 word_lower = word.lower()
                 # Look for "Patient" or OCR errors (palbent, pa bent, padiena, palhent, etc.)
-                if any(x in word_lower for x in ['patient', 'palbent', 'padiena', 'palhent']):
+                if any(x in word_lower for x in ['patient', 'palbent', 'padiena', 'palhent', 'patent', 'paoent']):
                     # Check next few words for ID pattern (ID, vo, lD, IO, etc.)
                     for j in range(i + 1, min(i + 5, len(data['text']))):
                         next_word = data['text'][j].strip().lower()
                         # Check for ID variants (with or without colon)
-                        if next_word in ['id', 'vo', 'ld', 'io', 'lO', 'IO',
-                                         'id:', 'vo:', 'ld:', 'io:', 'lO:', 'IO:']:
+                        if next_word in ['id', 'vo', 'ld', 'io', 'lO', 'IO', 'id:', 'vo:', 'ld:', 'io:', 'lO:', 'IO:']:
                             # Get the number after ID (skip colon if present)
                             for k in range(j + 1, min(j + 5, len(data['text']))):
                                 val = data['text'][k].strip()
@@ -201,7 +242,7 @@ class MedicalScanExtractor:
         # Priority 3: Line-by-line search for patterns like "| Padiena vo: 678003"
         lines = text.split('\n')
         for line in lines:
-            if any(x in line.lower() for x in ['padiena vo', 'palbent vo', 'palhent vo', 'patient vo']):
+            if any(x in line.lower() for x in ['padiena vo', 'palbent vo', 'palhent vo', 'patient vo', 'patent vo']):
                 # Extract number after colon
                 if ':' in line:
                     parts = line.split(':', 1)
@@ -213,7 +254,20 @@ class MedicalScanExtractor:
                             if len(patient_id) >= 4:
                                 return patient_id
 
-        # Priority 4: Accession Number as fallback - DISABLED
+        # Priority 4: Search for any 6-digit number near "Patient" context
+        # This is a fallback for heavily distorted OCR
+        lines = text.split('\n')
+        for i, line in enumerate(lines):
+            if any(x in line.lower() for x in ['patient', 'padiena', 'palbent', 'palhent']):
+                # Look for 6-digit numbers in this line or next 2 lines
+                search_text = ' '.join(lines[i:min(i+3, len(lines))])
+                numbers = re.findall(r'\b(\d{6,})\b', search_text)
+                for num in numbers:
+                    # Exclude common non-ID numbers
+                    if num not in ['000000', '111111', '123456']:
+                        return num
+
+        # Priority 5: Accession Number as fallback - DISABLED
         # We do NOT want to return Accession Number as Patient ID
         # These are different identifiers in medical records
         # pattern = r'Accession\s*Number\s*:\s*(\d+)'
