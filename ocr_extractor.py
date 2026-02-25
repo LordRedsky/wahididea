@@ -11,7 +11,6 @@ from PIL import Image
 from typing import Dict, Optional
 import platform
 import os
-import subprocess
 
 
 class MedicalScanExtractor:
@@ -23,42 +22,13 @@ class MedicalScanExtractor:
         
         if system == "Windows":
             # Windows path (adjust if Tesseract is installed elsewhere)
-            tesseract_paths = [
-                r'C:\Program Files\Tesseract-OCR\tesseract.exe',
-                r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
-            ]
-            for path in tesseract_paths:
-                if os.path.exists(path):
-                    pytesseract.pytesseract.tesseract_cmd = path
-                    break
+            pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
         elif system == "Linux":
-            # Linux - try to find tesseract
-            tesseract_paths = [
-                '/usr/bin/tesseract',
-                '/usr/local/bin/tesseract',
-                '/snap/bin/tesseract',
-            ]
-            for path in tesseract_paths:
-                if os.path.exists(path):
-                    pytesseract.pytesseract.tesseract_cmd = path
-                    break
-            # Also try to get from PATH
-            try:
-                result = subprocess.run(['which', 'tesseract'], capture_output=True, text=True)
-                if result.returncode == 0 and result.stdout.strip():
-                    pytesseract.pytesseract.tesseract_cmd = result.stdout.strip()
-            except Exception:
-                pass
+            # Linux path (standard installation path)
+            pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
         elif system == "Darwin":  # macOS
-            tesseract_paths = [
-                '/opt/homebrew/bin/tesseract',
-                '/usr/local/bin/tesseract',
-            ]
-            for path in tesseract_paths:
-                if os.path.exists(path):
-                    pytesseract.pytesseract.tesseract_cmd = path
-                    break
-        # For other systems, pytesseract will use the default path from PATH
+            pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
+        # For other systems, pytesseract will use the default path
     
     def preprocess_image(self, image_path: str) -> np.ndarray:
         """
@@ -107,13 +77,16 @@ class MedicalScanExtractor:
         combined_text = text + "\n" + text_sparse
 
         # Also get detailed data with bounding boxes
+        # Use PSM 6 for general data (better for structured text)
         data = pytesseract.image_to_data(processed_img, output_type=pytesseract.Output.DICT)
+        # Use PSM 11 for Patient ID (better for sparse text fields)
+        data_sparse = pytesseract.image_to_data(processed_img, config=config2, output_type=pytesseract.Output.DICT)
 
         # Extract fields using multiple methods
         result = {
             'nama_pasien': self._extract_patient_name(combined_text, data),
             'tanggal_pemeriksaan': self._extract_exam_date(combined_text),
-            'id_pasien': self._extract_patient_id(combined_text, data),
+            'id_pasien': self._extract_patient_id(combined_text, data_sparse),  # Use sparse data for ID
             'jenis_pemeriksaan': self._extract_exam_description(image_path, combined_text, data),
             'ctdi_vol': self._extract_ctdi_vol(combined_text, data),
             'total_dlp': self._extract_total_dlp(combined_text, data)
@@ -186,35 +159,67 @@ class MedicalScanExtractor:
     def _extract_patient_id(self, text: str, data: Dict = None) -> Optional[str]:
         """Extract patient ID from OCR text"""
         # Priority 1: Look for "Patient ID:" pattern (with OCR error tolerance)
+        # OCR often misreads ID as 'vo', 'lD', 'IO', 'lO'
+        # OCR also misreads "Patient ID" as "Padiena vo", "Palbent ID", etc.
         patterns = [
             r'Patient\s*ID\s*:\s*(\d+)',
             r'Patient\s*vo\s*:\s*(\d+)',  # OCR error: ID -> vo
             r'Patient\s*lD\s*:\s*(\d+)',  # OCR error: ID -> lD
+            r'Patient\s*IO\s*:\s*(\d+)',  # OCR error: ID -> IO
+            r'Patient\s*lO\s*:\s*(\d+)',  # OCR error: ID -> lO
+            r'Padiena\s+vo\s*:\s*(\d+)',  # OCR error: Patient ID -> Padiena vo
+            r'Palbent\s*ID\s*:\s*(\d+)',  # OCR error: Patient -> Palbent
+            r'Palbent\s*vo\s*:\s*(\d+)',  # OCR error: Patient ID -> Palbent vo
+            r'Palhent\s*vo\s*:\s*(\d+)',  # OCR error: Patient ID -> Palhent vo
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 return match.group(1).strip()
 
-        # Priority 2: Search in data blocks for Patient ID
+        # Priority 2: Search in data blocks for Patient ID using bounding box data
+        # This is more reliable as it uses spatial information
         if data:
             for i, word in enumerate(data.get('text', [])):
-                if 'patient' in word.lower() or 'palbent' in word.lower():
-                    # Check next few words for ID pattern
-                    for j in range(i + 1, min(i + 4, len(data['text']))):
-                        next_word = data['text'][j].strip()
-                        if next_word.lower() in ['id', 'vo', 'ld']:
-                            # Get the number after ID
-                            for k in range(j + 1, min(j + 3, len(data['text']))):
+                word_lower = word.lower()
+                # Look for "Patient" or OCR errors (palbent, pa bent, padiena, palhent, etc.)
+                if any(x in word_lower for x in ['patient', 'palbent', 'padiena', 'palhent']):
+                    # Check next few words for ID pattern (ID, vo, lD, IO, etc.)
+                    for j in range(i + 1, min(i + 5, len(data['text']))):
+                        next_word = data['text'][j].strip().lower()
+                        # Check for ID variants (with or without colon)
+                        if next_word in ['id', 'vo', 'ld', 'io', 'lO', 'IO',
+                                         'id:', 'vo:', 'ld:', 'io:', 'lO:', 'IO:']:
+                            # Get the number after ID (skip colon if present)
+                            for k in range(j + 1, min(j + 5, len(data['text']))):
                                 val = data['text'][k].strip()
-                                if val.isdigit() and len(val) >= 4:
-                                    return val
+                                # Remove any non-digit characters
+                                clean_val = re.sub(r'[^\d]', '', val)
+                                if clean_val.isdigit() and len(clean_val) >= 4:
+                                    return clean_val
 
-        # Priority 3: Accession Number as fallback (only if Patient ID not found)
-        pattern = r'Accession\s*Number\s*:\s*(\d+)'
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            return match.group(1).strip()
+        # Priority 3: Line-by-line search for patterns like "| Padiena vo: 678003"
+        lines = text.split('\n')
+        for line in lines:
+            if any(x in line.lower() for x in ['padiena vo', 'palbent vo', 'palhent vo', 'patient vo']):
+                # Extract number after colon
+                if ':' in line:
+                    parts = line.split(':', 1)
+                    if len(parts) == 2:
+                        number = parts[1].strip()
+                        id_match = re.search(r'(\d+)', number)
+                        if id_match:
+                            patient_id = id_match.group(1).strip()
+                            if len(patient_id) >= 4:
+                                return patient_id
+
+        # Priority 4: Accession Number as fallback - DISABLED
+        # We do NOT want to return Accession Number as Patient ID
+        # These are different identifiers in medical records
+        # pattern = r'Accession\s*Number\s*:\s*(\d+)'
+        # match = re.search(pattern, text, re.IGNORECASE)
+        # if match:
+        #     pass  # Do not return Accession Number as Patient ID
 
         return None
     
@@ -370,30 +375,35 @@ class MedicalScanExtractor:
     def _extract_total_dlp(self, text: str, data: Dict = None) -> Optional[str]:
         """Extract Total DLP value from OCR text"""
         # Pattern 1: Look for "Total Exam DLP:" pattern (with OCR error tolerance)
+        # OCR errors: Total -> Totl, DLP -> OLP, O8P, missing spaces
         patterns = [
             r'Total\s*Exam\s*DLP\s*:\s*([\d\.]+)',
-            r'Total\s*Exam\s*O8P\s*:\s*([\d\.]+)',  # OCR error: DLP -> O8P
             r'Total\s*Exam\s*OLP\s*:\s*([\d\.]+)',  # OCR error: DLP -> OLP
-            r'Total\s*Exam\s*DLP\s+([\d\.]+)',
+            r'Total\s*Exam\s*O8P\s*:\s*([\d\.]+)',  # OCR error: DLP -> O8P
+            r'Totl\s*Exam\s*OLP\s*:\s*([\d\.]+)',   # OCR error: Total -> Totl
+            r'TotlExam\s*OLP\s*:\s*([\d\.]+)',      # OCR error: missing space
+            r'Total\s*Exam\s*OLP\s+([\d\.]+)',
             r'Total\s*Exam\s*O8P\s+([\d\.]+)',
+            r'TotalExam\s*OLP\s*:\s*([\d\.]+)',     # OCR error: missing space
         ]
         for pattern in patterns:
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
                 return match.group(1).strip()
 
-        # Pattern 2: Search line by line for "Total" and "DLP" on same line
+        # Pattern 2: Search line by line for "Total" and "DLP/OLP/O8P" on same line
         lines = text.split('\n')
         for line in lines:
-            if ('Total' in line or 'total' in line) and ('DLP' in line or 'O8P' in line or 'OLP' in line):
+            if ('Total' in line or 'Totl' in line or 'total' in line) and \
+               ('DLP' in line or 'OLP' in line or 'O8P' in line or '718' in line):
                 # Extract all numbers from this line
                 numbers = re.findall(r'(\d+\.\d+)', line)
                 if numbers:
                     return numbers[-1]  # Usually the last number is the DLP value
-        
+
         # Pattern 3: Look for "Total" followed by "Exam" and then a number
         for line in lines:
-            if ('Total' in line or 'total' in line) and 'Exam' in line:
+            if ('Total' in line or 'Totl' in line or 'total' in line) and 'Exam' in line:
                 numbers = re.findall(r'(\d+\.\d+)', line)
                 if numbers:
                     return numbers[-1]
@@ -407,17 +417,17 @@ class MedicalScanExtractor:
         # Pattern 5: Use bounding box data if available
         if data:
             for i, word in enumerate(data.get('text', [])):
-                if 'total' in word.lower() or 'Total' in word:
+                if 'total' in word.lower() or 'Total' in word or 'Totl' in word:
                     # Check if next few words contain DLP (or OCR errors)
                     next_words = data['text'][i+1:i+6]
-                    if any('dlp' in w.lower() or 'DLP' in w or 'o8p' in w.lower() for w in next_words):
+                    if any('dlp' in w.lower() or 'DLP' in w or 'olp' in w.lower() or 'OLP' in w or 'o8p' in w.lower() for w in next_words):
                         # Find the first number after DLP
                         for w in next_words:
                             if re.match(r'^\d+\.\d+$', w):
                                 return w
 
         return None
-    
+
     def extract_from_pil_image(self, image: Image.Image) -> Dict[str, Optional[str]]:
         """
         Extract data from PIL Image object (for Streamlit uploaded files)
