@@ -51,9 +51,9 @@ tesseract --version
 
 ### Deploy to Streamlit Cloud
 
-**No Tesseract installation needed!** The `apt-packages.txt` file will automatically install Tesseract on Streamlit Cloud.
+**No Tesseract installation needed!** The `packages.txt` file will automatically install Tesseract on Streamlit Cloud.
 
-1. Push your code to GitHub
+1. Push your code to GitHub (make sure `packages.txt` is included)
 
 2. Go to [share.streamlit.io](https://share.streamlit.io)
 
@@ -65,7 +65,9 @@ tesseract --version
 
 5. Click "Deploy!"
 
-> **Note:** The `apt-packages.txt` file tells Streamlit Cloud to install Tesseract OCR automatically.
+> **Note:** The first deployment will take longer as it installs Tesseract OCR. Subsequent deployments will be faster.
+
+> **Important:** Make sure `packages.txt` is in your repository root directory, not `apt-packages.txt`.
 
 ## Usage
 
@@ -97,9 +99,10 @@ wahid idea/
 ├── ocr_extractor.py        # OCR extraction module
 ├── excel_handler.py        # Excel file handling
 ├── requirements.txt        # Python dependencies
-├── apt-packages.txt        # Linux packages for Streamlit Cloud (Tesseract)
+├── packages.txt            # Linux packages for Streamlit Cloud (Tesseract)
 ├── .streamlit/
 │   └── config.toml         # Streamlit configuration
+│   └── packages.txt        # Additional system packages
 ├── Rekap.xlsx              # Output Excel file (auto-generated)
 └── README.md               # This file
 ```
@@ -119,12 +122,14 @@ No manual configuration needed!
 
 ### Option 1: Streamlit Cloud (Recommended)
 
-**Pros:** Free, easy setup, automatic Tesseract installation via `apt-packages.txt`
+**Pros:** Free, easy setup, automatic Tesseract installation via `packages.txt`
 
 **Steps:**
-1. Push code to GitHub
+1. Push code to GitHub (include `packages.txt`)
 2. Deploy at [share.streamlit.io](https://share.streamlit.io)
 3. Select your repository and deploy
+
+> **Important:** First deployment takes 5-10 minutes to install Tesseract. Be patient!
 
 ### Option 2: Self-hosted on VPS
 
@@ -181,9 +186,10 @@ CMD ["streamlit", "run", "app.py"]
 ## Troubleshooting
 
 ### OCR not working on Streamlit Cloud:
-- Ensure `apt-packages.txt` exists in your repository root
-- Check deployment logs for Tesseract installation errors
+- Ensure `packages.txt` exists in your repository root (not `apt-packages.txt`)
+- Check deployment logs for Tesseract installation errors (first deploy takes 5-10 minutes)
 - Verify `requirements.txt` includes `pytesseract` and `opencv-python-headless`
+- After pushing `packages.txt`, wait for full redeployment before testing
 
 ### OCR not working locally:
 - Ensure Tesseract OCR is installed

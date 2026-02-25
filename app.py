@@ -8,6 +8,8 @@ from PIL import Image
 from ocr_extractor import MedicalScanExtractor
 from excel_handler import ExcelHandler
 import os
+import subprocess
+import platform
 
 
 # Page configuration
@@ -65,9 +67,34 @@ def main():
         st.header("📊 Statistics")
         record_count = excel_handler.get_record_count()
         st.metric("Total Records", record_count)
-        
+
         st.divider()
-        
+
+        # Tesseract Verification
+        st.header("🔍 System Status")
+        try:
+            # Check if tesseract is available
+            result = subprocess.run(
+                ['tesseract', '--version'],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                st.success("✅ Tesseract installed")
+                version_line = result.stdout.split('\n')[0]
+                st.caption(version_line)
+            else:
+                st.error("❌ Tesseract not found")
+        except FileNotFoundError:
+            st.error("❌ Tesseract not found")
+            st.caption("Installing from packages.txt...")
+            st.caption("First deployment takes 5-10 minutes")
+        except Exception as e:
+            st.error(f"❌ Error: {str(e)}")
+
+        st.divider()
+
         st.header("ℹ️ Information")
         st.markdown("""
         **Extracted Fields:**
@@ -78,9 +105,9 @@ def main():
         - CTDIvol (mGy)
         - Total DLP (mGy·cm)
         """)
-        
+
         st.divider()
-        
+
         if st.button("🗑️ Clear All Data", type="secondary", use_container_width=True):
             excel_handler.clear_all_data()
             st.success("All data cleared!")

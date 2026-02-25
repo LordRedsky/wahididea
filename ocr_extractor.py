@@ -11,6 +11,7 @@ from PIL import Image
 from typing import Dict, Optional
 import platform
 import os
+import subprocess
 
 
 class MedicalScanExtractor:
@@ -22,13 +23,42 @@ class MedicalScanExtractor:
         
         if system == "Windows":
             # Windows path (adjust if Tesseract is installed elsewhere)
-            pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+            tesseract_paths = [
+                r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+                r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+            ]
+            for path in tesseract_paths:
+                if os.path.exists(path):
+                    pytesseract.pytesseract.tesseract_cmd = path
+                    break
         elif system == "Linux":
-            # Linux path (standard installation path)
-            pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
+            # Linux - try to find tesseract
+            tesseract_paths = [
+                '/usr/bin/tesseract',
+                '/usr/local/bin/tesseract',
+                '/snap/bin/tesseract',
+            ]
+            for path in tesseract_paths:
+                if os.path.exists(path):
+                    pytesseract.pytesseract.tesseract_cmd = path
+                    break
+            # Also try to get from PATH
+            try:
+                result = subprocess.run(['which', 'tesseract'], capture_output=True, text=True)
+                if result.returncode == 0 and result.stdout.strip():
+                    pytesseract.pytesseract.tesseract_cmd = result.stdout.strip()
+            except Exception:
+                pass
         elif system == "Darwin":  # macOS
-            pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
-        # For other systems, pytesseract will use the default path
+            tesseract_paths = [
+                '/opt/homebrew/bin/tesseract',
+                '/usr/local/bin/tesseract',
+            ]
+            for path in tesseract_paths:
+                if os.path.exists(path):
+                    pytesseract.pytesseract.tesseract_cmd = path
+                    break
+        # For other systems, pytesseract will use the default path from PATH
     
     def preprocess_image(self, image_path: str) -> np.ndarray:
         """
