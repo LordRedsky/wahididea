@@ -73,12 +73,16 @@ class MedicalScanExtractor:
         
         return adaptive
     
-    def extract_data(self, image_path: str) -> Dict[str, Optional[str]]:
+    def extract_data(self, image_path: str, return_debug: bool = False) -> Dict[str, Optional[str]]:
         """
         Extract patient data from the image
 
+        Args:
+            image_path: Path to the image file
+            return_debug: If True, include debug info in result
+
         Returns:
-            Dictionary with extracted fields
+            Dictionary with extracted fields (and debug info if requested)
         """
         # Preprocess image with primary method
         processed_img = self.preprocess_image(image_path)
@@ -106,7 +110,7 @@ class MedicalScanExtractor:
             alt_img = self.preprocess_image_alternative(image_path)
             alt_text_sparse = pytesseract.image_to_string(alt_img, config=config2)
             alt_data_sparse = pytesseract.image_to_data(alt_img, config=config2, output_type=pytesseract.Output.DICT)
-            
+
             # Combine with original sparse data
             combined_text_for_id = combined_text + "\n" + alt_text_sparse
             combined_data_sparse = {
@@ -131,6 +135,14 @@ class MedicalScanExtractor:
             'ctdi_vol': self._extract_ctdi_vol(combined_text, data),
             'total_dlp': self._extract_total_dlp(combined_text, data)
         }
+
+        # Add debug info if requested
+        if return_debug:
+            result['_debug_ocr_text'] = combined_text
+            result['_debug_helical_lines'] = [
+                line.strip() for line in combined_text.split('\n')
+                if re.search(r'\bHelical\b', line.strip(), re.IGNORECASE)
+            ]
 
         return result
     
@@ -363,65 +375,67 @@ class MedicalScanExtractor:
     def _extract_ctdi_vol(self, text: str, data: Dict) -> Optional[str]:
         """Extract CTDIvol value from OCR text - ONLY from Helical scan type"""
         ctdi_values = []
+        helical_lines = []
 
-        # Pattern 1: Look for Helical scan rows ONLY - these contain the main CTDIvol values
-        # The format is typically: "Helical <scan_range> <ctdi_vol> <dlp>"
-        # May have optional $ symbol before range (OCR artifact)
-        # We ONLY extract CTDIvol from Helical type, ignore Axial or other types
-        helical_pattern = r'Helical\s+\$?([\d\.]+\-[\d\.]+)\s+(\d+\.\d+)\s+(\d+\.?\d*)'
-        helical_matches = re.findall(helical_pattern, text)
-        for match in helical_matches:
-            if len(match) >= 2:
-                ctdi_vol = match[1]  # Second number after scan range is CTDIvol
-                if ctdi_vol and float(ctdi_vol) > 0:
-                    ctdi_values.append(ctdi_vol)
-
-        # Pattern 2: Look for lines that start with number + Helical and contain CTDIvol values
-        # This catches variations in spacing and format (e.g., "2 Helical ...")
+        # Step 1: Find all lines containing "Helical" keyword (case insensitive)
         lines = text.split('\n')
         for line in lines:
             line_stripped = line.strip()
-            # ONLY process lines that contain Helical (case insensitive)
+            # ONLY process lines that contain Helical (case insensitive, with word boundary)
             if re.search(r'\bHelical\b', line_stripped, re.IGNORECASE):
-                # Extract all decimal numbers from this Helical line
-                numbers = re.findall(r'\$?(\d+\.\d+)', line_stripped)
-                # Typically format is: [Seq] Helical [<range>] <ctdi_vol> <dlp> [rest]
-                # So CTDIvol is typically the 2nd decimal number (after range end)
-                if len(numbers) >= 2:
-                    # numbers[0] = range end (e.g., 1439.425)
-                    # numbers[1] = CTDIvol (e.g., 11.09)
-                    # numbers[2] = DLP (e.g., 001.69)
-                    ctdi_candidate = numbers[1]
+                helical_lines.append(line_stripped)
+
+        # Step 2: Extract CTDIvol from Helical lines only using strict patterns
+        for helical_line in helical_lines:
+            # Skip lines that only contain "Helical" without any numbers
+            if not re.search(r'\d', helical_line):
+                continue
+
+            # Pattern 1: Helical with range format (most common)
+            # Format: "Helical <range> <ctdi_vol> <dlp>" or "[num] Helical <range> <ctdi_vol> <dlp>"
+            # Examples:
+            # - "2 Helical $60.575-1439.425 11.09 601.69 Body 32"
+            # - "Helical 6.770-1413.230 7.72 718.65"
+            pattern1 = r'Helical\s+\$?(\d+\.?\d*)\-?(\d+\.?\d*)\s+(\d+\.\d+)\s+(\d+\.?\d*)'
+            match = re.search(pattern1, helical_line)
+            if match:
+                # Group 3 is CTDIvol (first value after the range)
+                ctdi_vol = match.group(3)
+                if ctdi_vol:
                     try:
-                        val = float(ctdi_candidate)
+                        val = float(ctdi_vol)
                         # CTDIvol is typically in range 0.01 - 100 mGy
                         if 0.01 < val < 100:
-                            ctdi_values.append(ctdi_candidate)
+                            ctdi_values.append(ctdi_vol)
                     except ValueError:
                         pass
+                continue  # Found with pattern 1, move to next line
 
-        # Pattern 3: Look for Helical followed by table data (multi-line)
-        # Find "Helical" keyword and then look at next lines for CTDIvol column
-        helical_positions = []
-        for i, word in enumerate(data.get('text', [])):
-            if 'helical' in word.lower() or 'Helical' in word:
-                helical_positions.append(i)
+            # Pattern 2: Simpler Helical pattern without range
+            # Format: "Helical ... <number> <number>" where first small number is CTDIvol
+            if 'Helical' in helical_line:
+                # Extract all decimal numbers from this line
+                numbers = re.findall(r'(\d+\.\d+)', helical_line)
+                if len(numbers) >= 2:
+                    # Typically: [range_end, ctdi_vol, dlp]
+                    # CTDIvol is usually the second number (index 1) and is small (< 100)
+                    for num in numbers[1:3]:  # Check 2nd and 3rd numbers
+                        try:
+                            val = float(num)
+                            # CTDIvol is typically 0.01 - 100 mGy
+                            # DLP is typically larger (> 100)
+                            if 0.01 < val < 100:
+                                ctdi_values.append(num)
+                                break  # Take the first valid CTDIvol
+                        except ValueError:
+                            pass
 
-        # For each Helical keyword found, look for associated CTDIvol values
-        for pos in helical_positions:
-            # Look at next few words/numbers after "Helical"
-            for j in range(pos + 1, min(pos + 10, len(data.get('text', [])))):
-                word = data['text'][j].strip()
-                # Try to extract decimal numbers
-                if re.match(r'^\$?\d+\.\d+$', word):
-                    try:
-                        val = float(word.replace('$', ''))
-                        if 0.01 < val < 100:  # CTDIvol range
-                            ctdi_values.append(word.replace('$', ''))
-                    except ValueError:
-                        pass
+        # Step 3: If no Helical lines found, return None (do NOT fallback to non-Helical)
+        # This ensures we ONLY extract from Helical scans
+        if not helical_lines:
+            return None
 
-        # Return the most common/consistent CTDIvol value from Helical scans only
+        # Step 4: Return the most common/consistent CTDIvol value from Helical scans only
         if ctdi_values:
             # Filter valid values
             valid_values = [v for v in ctdi_values if v and float(v) > 0]
@@ -490,23 +504,30 @@ class MedicalScanExtractor:
 
         return None
 
-    def extract_from_pil_image(self, image: Image.Image) -> Dict[str, Optional[str]]:
+    def extract_from_pil_image(self, image: Image.Image, return_debug: bool = False) -> Dict[str, Optional[str]]:
         """
         Extract data from PIL Image object (for Streamlit uploaded files)
+        
+        Args:
+            image: PIL Image object
+            return_debug: If True, include debug info in result
+            
+        Returns:
+            Dictionary with extracted fields (and debug info if requested)
         """
         # Convert PIL to OpenCV format
         img_array = np.array(image)
         img_rgb = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-        
+
         # Save temporarily for processing
         temp_path = 'temp_upload.png'
         cv2.imwrite(temp_path, img_rgb)
-        
-        result = self.extract_data(temp_path)
-        
+
+        result = self.extract_data(temp_path, return_debug=return_debug)
+
         # Clean up
         import os
         if os.path.exists(temp_path):
             os.remove(temp_path)
-        
+
         return result

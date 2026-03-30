@@ -91,6 +91,29 @@ The app will automatically open at `http://localhost:8501`
    - Review the extracted data
    - Click "💾 Save to Excel" to save to Rekap.xlsx
 
+## Debug Mode (for Streamlit Cloud)
+
+If you're experiencing issues with CTDIvol extraction on Streamlit Cloud:
+
+1. **Enable Debug Mode:**
+   - In the sidebar, check "Enable OCR Debug"
+   - This will show the OCR text output and detected Helical lines
+
+2. **Check the extracted data:**
+   - After extraction, expand "📝 View OCR Text Output" to see raw OCR text
+   - Check "📋 Helical Lines Detected" to see which lines were identified as Helical scans
+   - The CTDIvol value is only extracted from lines containing "Helical"
+
+3. **Common issues:**
+   - **No Helical lines detected:** The OCR might not recognize "Helical" keyword clearly
+   - **Wrong CTDIvol value:** Check if the Helical line contains the correct scan parameters
+   - **Different Tesseract version:** Streamlit Cloud may use a different Tesseract version than local
+
+4. **Tips for better accuracy:**
+   - Use high-quality, clear images
+   - Ensure the dose report table is clearly visible
+   - Avoid glare or shadows on the image
+
 ## Project Structure
 
 ```

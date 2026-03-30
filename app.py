@@ -95,6 +95,17 @@ def main():
 
         st.divider()
 
+        # Debug options
+        st.header("🐛 Debug")
+        debug_mode = st.checkbox("Enable OCR Debug", value=False, help="Show OCR text output")
+        if debug_mode:
+            st.session_state['debug_ocr'] = True
+            st.info("Debug mode enabled")
+        else:
+            st.session_state['debug_ocr'] = False
+
+        st.divider()
+
         st.header("ℹ️ Information")
         st.markdown("""
         **Extracted Fields:**
@@ -129,18 +140,41 @@ def main():
             # Display uploaded image
             image = Image.open(uploaded_file)
             st.image(image, caption="Uploaded Image", use_container_width=True)
-            
+
             # Extract button
             if st.button("🔍 Extract Data", type="primary", use_container_width=True):
                 with st.spinner("Processing image... Please wait."):
-                    # Extract data
-                    extracted_data = extractor.extract_from_pil_image(image)
-                    
+                    # Extract data with debug info if enabled
+                    debug_mode = st.session_state.get('debug_ocr', False)
+                    extracted_data = extractor.extract_from_pil_image(image, return_debug=debug_mode)
+
                     # Store in session state
                     st.session_state['extracted_data'] = extracted_data
                     st.session_state['image_uploaded'] = True
-                
+
                 st.success("Data extracted successfully!")
+                
+                # Show debug info if enabled
+                if debug_mode:
+                    st.warning("🐛 **Debug Mode Enabled**")
+                    with st.expander("📝 View OCR Text Output", expanded=True):
+                        ocr_text = extracted_data.get('_debug_ocr_text', 'No OCR text available')
+                        st.text(ocr_text)
+                    
+                    with st.expander("📋 Helical Lines Detected"):
+                        helical_lines = extracted_data.get('_debug_helical_lines', [])
+                        if helical_lines:
+                            for i, line in enumerate(helical_lines):
+                                st.text(f"Line {i+1}: {line}")
+                        else:
+                            st.warning("No Helical lines detected in OCR text")
+                    
+                    st.info(f"""
+                    **Extraction Summary:**
+                    - CTDIvol: `{extracted_data.get('ctdi_vol', 'Not detected')}` mGy
+                    - Total DLP: `{extracted_data.get('total_dlp', 'Not detected')}` mGy·cm
+                    - Helical lines found: {len(extracted_data.get('_debug_helical_lines', []))}
+                    """)
     
     with col2:
         st.header("📋 Extracted Data")
