@@ -361,12 +361,14 @@ class MedicalScanExtractor:
         return None
     
     def _extract_ctdi_vol(self, text: str, data: Dict) -> Optional[str]:
-        """Extract CTDIvol value from OCR text"""
+        """Extract CTDIvol value from OCR text - ONLY from Helical scan type"""
         ctdi_values = []
 
-        # Pattern 1: Look for Helical scan rows - these contain the main CTDIvol values
+        # Pattern 1: Look for Helical scan rows ONLY - these contain the main CTDIvol values
         # The format is typically: "Helical <scan_range> <ctdi_vol> <dlp>"
-        helical_pattern = r'Helical\s+([\d\.]+\-[\d\.]+)\s+(\d+\.\d+)\s+(\d+\.\d+)'
+        # May have optional $ symbol before range (OCR artifact)
+        # We ONLY extract CTDIvol from Helical type, ignore Axial or other types
+        helical_pattern = r'Helical\s+\$?([\d\.]+\-[\d\.]+)\s+(\d+\.\d+)\s+(\d+\.?\d*)'
         helical_matches = re.findall(helical_pattern, text)
         for match in helical_matches:
             if len(match) >= 2:
@@ -374,51 +376,57 @@ class MedicalScanExtractor:
                 if ctdi_vol and float(ctdi_vol) > 0:
                     ctdi_values.append(ctdi_vol)
 
-        # Pattern 2: Look for lines with CTDIvol header and extract values below
+        # Pattern 2: Look for lines that start with number + Helical and contain CTDIvol values
+        # This catches variations in spacing and format (e.g., "2 Helical ...")
         lines = text.split('\n')
-        for i, line in enumerate(lines):
-            if 'CTDIvol' in line or 'CTDI' in line:
-                # Look for numeric values in the next few lines (table rows)
-                for j in range(i + 1, min(i + 6, len(lines))):
-                    # Find decimal numbers that could be CTDIvol values (typically 0-100 range)
-                    numbers = re.findall(r'\b(\d+\.\d+)\b', lines[j])
-                    for num in numbers:
-                        try:
-                            val = float(num)
-                            if 0.01 < val < 100:  # CTDIvol is typically in this range
-                                ctdi_values.append(num)
-                        except ValueError:
-                            pass
+        for line in lines:
+            line_stripped = line.strip()
+            # ONLY process lines that contain Helical (case insensitive)
+            if re.search(r'\bHelical\b', line_stripped, re.IGNORECASE):
+                # Extract all decimal numbers from this Helical line
+                numbers = re.findall(r'\$?(\d+\.\d+)', line_stripped)
+                # Typically format is: [Seq] Helical [<range>] <ctdi_vol> <dlp> [rest]
+                # So CTDIvol is typically the 2nd decimal number (after range end)
+                if len(numbers) >= 2:
+                    # numbers[0] = range end (e.g., 1439.425)
+                    # numbers[1] = CTDIvol (e.g., 11.09)
+                    # numbers[2] = DLP (e.g., 001.69)
+                    ctdi_candidate = numbers[1]
+                    try:
+                        val = float(ctdi_candidate)
+                        # CTDIvol is typically in range 0.01 - 100 mGy
+                        if 0.01 < val < 100:
+                            ctdi_values.append(ctdi_candidate)
+                    except ValueError:
+                        pass
 
-        # Pattern 3: Use bounding box data to find CTDIvol column values
-        # Find the column position of CTDIvol header
-        ctdi_positions = []
+        # Pattern 3: Look for Helical followed by table data (multi-line)
+        # Find "Helical" keyword and then look at next lines for CTDIvol column
+        helical_positions = []
         for i, word in enumerate(data.get('text', [])):
-            if 'ctdi' in word.lower() or 'CTDI' in word:
-                # Get the vertical position (top) of this word
-                if i < len(data.get('top', [])):
-                    ctdi_positions.append(data['top'][i])
+            if 'helical' in word.lower() or 'Helical' in word:
+                helical_positions.append(i)
 
-        # Pattern 4: Look for standalone decimal values that could be CTDIvol
-        # These are typically small values (0.01 - 50 mGy)
-        decimal_pattern = r'\b(\d+\.\d+)\b'
-        all_decimals = re.findall(decimal_pattern, text)
-        for num in all_decimals:
-            try:
-                val = float(num)
-                if 0.01 < val < 50:  # CTDIvol range
-                    # Check if it's not part of a scan range (which has format like 6.770-1413.230)
-                    if not re.search(rf'{num}[\d\-\.]+', text):
-                        ctdi_values.append(num)
-            except ValueError:
-                pass
+        # For each Helical keyword found, look for associated CTDIvol values
+        for pos in helical_positions:
+            # Look at next few words/numbers after "Helical"
+            for j in range(pos + 1, min(pos + 10, len(data.get('text', [])))):
+                word = data['text'][j].strip()
+                # Try to extract decimal numbers
+                if re.match(r'^\$?\d+\.\d+$', word):
+                    try:
+                        val = float(word.replace('$', ''))
+                        if 0.01 < val < 100:  # CTDIvol range
+                            ctdi_values.append(word.replace('$', ''))
+                    except ValueError:
+                        pass
 
-        # Return the most common CTDIvol value (main scan value)
+        # Return the most common/consistent CTDIvol value from Helical scans only
         if ctdi_values:
             # Filter valid values
             valid_values = [v for v in ctdi_values if v and float(v) > 0]
             if valid_values:
-                # Return the most frequent value or the maximum
+                # Return the most frequent value (mode)
                 from collections import Counter
                 most_common = Counter(valid_values).most_common(1)
                 if most_common:
