@@ -13,6 +13,21 @@ from openpyxl import load_workbook
 class ExcelHandler:
     """Handle Excel operations for storing extracted data"""
     
+    # Expected headers - complete list
+    EXPECTED_HEADERS = [
+        "No",
+        "Tanggal Upload",
+        "Nama Pasien",
+        "Tanggal Pemeriksaan",
+        "ID Pasien",
+        "Umur Pasien",
+        "Jenis Kelamin",
+        "Jenis Pemeriksaan",
+        "Tegangan (kV)",
+        "CTDIvol (mGy)",
+        "Total DLP (mGy·cm)"
+    ]
+    
     def __init__(self, filename: str = "Rekap.xlsx"):
         self.filename = filename
         self._initialize_excel()
@@ -21,6 +36,9 @@ class ExcelHandler:
         """Initialize Excel file with headers if it doesn't exist"""
         if not os.path.exists(self.filename):
             self._create_new_excel()
+        else:
+            # Check and update headers if needed
+            self._update_headers_if_needed()
     
     def _create_new_excel(self):
         """Create new Excel file with headers"""
@@ -28,20 +46,8 @@ class ExcelHandler:
         ws = wb.active
         ws.title = "Data Pasien"
 
-        # Headers
-        headers = [
-            "No",
-            "Tanggal Upload",
-            "Nama Pasien",
-            "Tanggal Pemeriksaan",
-            "ID Pasien",
-            "Umur Pasien",
-            "Jenis Kelamin",
-            "Jenis Pemeriksaan",
-            "Tegangan (kV)",
-            "CTDIvol (mGy)",
-            "Total DLP (mGy·cm)"
-        ]
+        # Headers - Complete list of all fields
+        headers = self.EXPECTED_HEADERS
 
         for col, header in enumerate(headers, 1):
             ws.cell(row=1, column=col, value=header)
@@ -50,7 +56,34 @@ class ExcelHandler:
         self._style_headers(ws)
 
         wb.save(self.filename)
-
+    
+    def _update_headers_if_needed(self):
+        """Update Excel headers if file exists with old headers"""
+        try:
+            wb = load_workbook(self.filename)
+            ws = wb.active
+            
+            # Get current headers
+            current_headers = [cell.value for cell in ws[1]]
+            
+            # Check if headers match expected
+            if current_headers != self.EXPECTED_HEADERS:
+                print(f"Updating headers...")
+                print(f"Old headers: {current_headers}")
+                print(f"New headers: {self.EXPECTED_HEADERS}")
+                
+                # Update header row
+                for col, header in enumerate(self.EXPECTED_HEADERS, 1):
+                    ws.cell(row=1, column=col, value=header)
+                
+                # Style headers
+                self._style_headers(ws)
+                
+                wb.save(self.filename)
+                print("Headers updated successfully!")
+        except Exception as e:
+            print(f"Error updating headers: {e}")
+    
     def _style_headers(self, ws):
         """Apply styling to header row"""
         from openpyxl.styles import Font, PatternFill, Alignment
@@ -85,7 +118,7 @@ class ExcelHandler:
         # Get next row number
         next_row = ws.max_row + 1
 
-        # Prepare data
+        # Prepare data - match all fields
         record = [
             next_row - 1,  # No (sequential)
             datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # Tanggal Upload
@@ -160,5 +193,5 @@ class ExcelHandler:
         # Delete all rows except header
         for row in range(ws.max_row, 1, -1):
             ws.delete_rows(row)
-        
+
         wb.save(self.filename)
