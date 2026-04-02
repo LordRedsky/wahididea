@@ -4,7 +4,7 @@ A Streamlit application that extracts patient data from CT scan dose report imag
 
 ## Features
 
-- 📤 Upload CT scan dose report images (JPG, PNG)
+- 📤 Upload CT scan dose report images (JPG, PNG, DICOM)
 - 🔍 Automatic data extraction using OCR (Tesseract)
 - 📋 Extract fields:
   - Nama Pasien (Patient Name)
@@ -15,6 +15,27 @@ A Streamlit application that extracts patient data from CT scan dose report imag
   - Total DLP (Total Dose)
 - 💾 Save extracted data to Excel (Rekap.xlsx)
 - 📊 View and download Excel data
+- 🖥️ **NEW**: Build as Windows .exe for offline use!
+- 🏥 **DICOM Support**: Process DICOM files (.dcm) and medical scan files without extension
+
+## Quick Start
+
+### Option 1: Run with Streamlit (Development)
+```bash
+streamlit run app.py
+```
+
+### Option 2: Build Windows .exe (Production)
+For deploying to computers without Python/Streamlit:
+
+```bash
+# Quick build (requires Tesseract OCR installed)
+python build\simple_build.py
+
+# Output: dist\BalitbangMunaExtractor\BalitbangMunaExtractor.exe
+```
+
+See **`build\QUICK_BUILD.md`** for detailed instructions.
 
 ## Prerequisites
 
@@ -143,7 +164,35 @@ No manual configuration needed!
 
 ## Deployment Options
 
-### Option 1: Streamlit Cloud (Recommended)
+### Option 1: Windows .exe (Recommended for Offline Use)
+
+**Pros:** No Python required, works offline, easy distribution, professional installer
+
+**Requirements for Building:**
+- Windows 10 or later
+- Python 3.10+
+- Tesseract OCR installed
+
+**Build Steps:**
+```bash
+# Install Tesseract OCR first
+# Download from: https://github.com/UB-Mannheim/tesseract/wiki
+
+# Build the executable
+python build\simple_build.py
+
+# Output locations:
+# - dist\BalitbangMunaExtractor\ (portable version)
+# - installer_output\ (after creating installer with Inno Setup)
+```
+
+**Distribution:**
+- **Portable**: Copy the entire `dist\BalitbangMunaExtractor\` folder
+- **Installer**: Use Inno Setup to create professional installer
+
+See **`build\QUICK_BUILD.md`** for complete instructions.
+
+### Option 2: Streamlit Cloud (Recommended for Web Access)
 
 **Pros:** Free, easy setup, automatic Tesseract installation via `packages.txt`
 
@@ -154,7 +203,7 @@ No manual configuration needed!
 
 > **Important:** First deployment takes 5-10 minutes to install Tesseract. Be patient!
 
-### Option 2: Self-hosted on VPS
+### Option 3: Self-hosted on VPS
 
 **Pros:** Full control, custom domain
 
@@ -175,7 +224,7 @@ pip install -r requirements.txt
 streamlit run app.py --server.port 8501 --server.address 0.0.0.0
 ```
 
-### Option 3: Docker
+### Option 4: Docker
 
 Create a `Dockerfile`:
 ```dockerfile

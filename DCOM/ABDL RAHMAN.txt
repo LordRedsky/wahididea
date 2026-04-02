@@ -1,0 +1,124 @@
+(Group,Element)  	TAG Description                    	VR	VM	Length    	Value
+(0002,0000)      	File Meta Information Group Length 	UL	1	4         	178
+(0002,0001)      	File Meta Information Version      	OB	1	2         	00\01
+(0002,0002)      	Media Storage SOP Class UID        	UI	1	26        	1.2.840.10008.5.1.4.1.1.7
+(0002,0003)      	Media Storage SOP Instance UID     	UI	1	52        	1.2.840.113619.2.417.3.2831180800.528.1769907745.222
+(0002,0010)      	Transfer Syntax UID                	UI	1	18        	1.2.840.10008.1.2 (Implicit VR Endian)
+(0002,0012)      	Implementation Class UID           	UI	1	20        	1.2.840.113619.6.417
+(0002,0013)      	Implementation Version Name        	SH	1	8         	GSP_TAP
+(0008,0001)      	RETIRED_ Length To End             	UL	1	4         	525106
+(0008,0005)      	Specific Character Set             	CS	1	10        	ISO_IR 100
+(0008,0008)      	Image Type                         	CS	3	30        	DERIVED\SECONDARY\SCREEN SAVE
+(0008,0012)      	Instance Creation Date             	DA	1	8         	20260202
+(0008,0013)      	Instance Creation Time             	TM	1	6         	111300
+(0008,0016)      	SOP Class UID                      	UI	1	26        	1.2.840.10008.5.1.4.1.1.7
+(0008,0018)      	SOP Instance UID                   	UI	1	52        	1.2.840.113619.2.417.3.2831180800.528.1769907745.222
+(0008,0020)      	Study Date                         	DA	1	8         	20260202
+(0008,0021)      	Series Date                        	DA	1	8         	20260202
+(0008,0022)      	Acquisition Date                   	DA	1	8         	20260202
+(0008,0023)      	Content Date                       	DA	1	8         	20260202
+(0008,0030)      	Study Time                         	TM	1	6         	111300
+(0008,0031)      	Series Time                        	TM	1	6         	111300
+(0008,0032)      	Acquisition Time                   	TM	1	6         	111300
+(0008,0033)      	Content Time                       	TM	1	6         	111300
+(0008,0050)      	Accession Number                   	SH	1	2         	03
+(0008,0060)      	Modality                           	CS	1	2         	CT
+(0008,0064)      	Conversion Type                    	CS	1	4         	WSD
+(0008,0070)      	Manufacturer                       	LO	1	18        	GE MEDICAL SYSTEMS
+(0008,0080)      	Institution Name                   	LO	1	24        	RSUD Bahteramas Kendari
+(0008,0090)      	Referring Physician Name           	PN	1	22        	dr. Ika Kartika, Sp.M
+(0008,1010)      	Station Name                       	SH	1	4         	ct99
+(0008,1030)      	Study Description                  	LO	1	10        	CT KEPALA
+(0008,103E)      	Series Description                 	LO	1	12        	Dose Report
+(0008,1050)      	Performing Physician Name          	PN	0	0         	
+(0008,1090)      	Manufacturer Model Name            	LO	1	14        	Revolution ACT
+(0010,0010)      	Patient Name                       	PN	1	16        	ABDUL RAHMAN. TN
+(0010,0020)      	Patient ID                         	LO	1	6         	680322
+(0010,0030)      	Patient Birth Date                 	DA	1	8         	19991224
+(0010,0040)      	Patient Sex                        	CS	1	2         	M
+(0010,1000)      	RETIRED_ Other Patient I Ds        	LO	0	0         	
+(0010,1010)      	Patient Age                        	AS	1	4         	026Y
+(0010,21B0)      	Additional Patient History         	LT	1	42        	OS PUPIL EDEMA EC SUSP MASSA INTRAKRANIAL
+(0018,1030)      	Protocol Name                      	LO	1	16        	1.2 Helical Head
+(0018,5100)      	Patient Position                   	CS	1	4         	HFS
+(0020,000D)      	Study Instance UID                 	UI	1	52        	1.2.840.113619.2.417.3.2831180800.528.1769907745.160
+(0020,000E)      	Series Instance UID                	UI	1	52        	1.2.840.113619.2.417.3.2831180800.528.1769907745.221
+(0020,0010)      	Study ID                           	SH	1	4         	6966
+(0020,0011)      	Series Number                      	IS	1	4         	999
+(0020,0013)      	Instance Number                    	IS	1	2         	1
+(0020,0020)      	Patient Orientation                	CS	0	0         	
+(0028,0002)      	Samples Per Pixel                  	US	1	2         	1
+(0028,0004)      	Photometric Interpretation         	CS	1	12        	MONOCHROME2
+(0028,0010)      	Rows                               	US	1	2         	512
+(0028,0011)      	Columns                            	US	1	2         	512
+(0028,0100)      	Bits Allocated                     	US	1	2         	16
+(0028,0101)      	Bits Stored                        	US	1	2         	16
+(0028,0102)      	High Bit                           	US	1	2         	15
+(0028,0103)      	Pixel Representation               	US	1	2         	1
+(0028,1050)      	Window Center                      	DS	1	4         	-512
+(0028,1051)      	Window Width                       	DS	1	4         	1024
+(0028,1052)      	Rescale Intercept                  	DS	1	6         	-1024
+(0028,1053)      	Rescale Slope                      	DS	1	2         	1
+(0028,1054)      	Rescale Type                       	LO	1	2         	HU
+(0040,0301)      	RETIRED_ Total Number Of Exposures 	US	1	2         	3
+(0040,030E)      	RETIRED_ Exposure Dose Sequence    	SQ	1	4294967295	
+   (FFFE,E000)   	Item                               		1	4294967295	
+      (0018,0015)	Body Part Examined                 	CS	1	4         	HEAD
+      (0018,0060)	KVP                                	DS	1	4         	120
+      (0018,1150)	Exposure Time                      	IS	1	4         	2700
+      (0018,8151)	X Ray Tube Current in µA           	DS	1	8         	10000.00
+      (0018,9302)	Acquisition Type                   	CS	1	14        	CONSTANT_ANGLE
+      (0018,9306)	Single Collimation Width           	FD	1	8         	1.25
+      (0018,9307)	Total Collimation Width            	FD	1	8         	5
+      (0018,9311)	Spiral Pitch Factor                	FD	1	8         	1
+      (0018,9345)	CTD Ivol                           	FD	1	8         	0.06
+      (0018,9346)	CTDI Phantom Type Code Sequence    	SQ	1	4294967295	
+         (FFFE,E000)	Item                               		1	4294967295	
+            (0008,0100)	Code Value                         	SH	1	6         	113691
+            (0008,0102)	Coding Scheme Designator           	SH	1	4         	DCM
+            (0008,0104)	Code Meaning                       	LO	1	26        	IEC Body Dosimetry Phantom
+         (FFFE,E00D)	Item Delimitation Item             		0	          	
+      (FFFE,E0DD)	Sequence Delimitation Item         		0	          	
+   (FFFE,E00D)   	Item Delimitation Item             		0	          	
+   (FFFE,E000)   	Item                               		1	4294967295	
+      (0018,0015)	Body Part Examined                 	CS	1	4         	HEAD
+      (0018,0060)	KVP                                	DS	1	4         	120
+      (0018,1150)	Exposure Time                      	IS	1	4         	2700
+      (0018,8151)	X Ray Tube Current in µA           	DS	1	8         	10000.00
+      (0018,9302)	Acquisition Type                   	CS	1	14        	CONSTANT_ANGLE
+      (0018,9306)	Single Collimation Width           	FD	1	8         	1.25
+      (0018,9307)	Total Collimation Width            	FD	1	8         	5
+      (0018,9311)	Spiral Pitch Factor                	FD	1	8         	1
+      (0018,9345)	CTD Ivol                           	FD	1	8         	0.06
+      (0018,9346)	CTDI Phantom Type Code Sequence    	SQ	1	4294967295	
+         (FFFE,E000)	Item                               		1	4294967295	
+            (0008,0100)	Code Value                         	SH	1	6         	113691
+            (0008,0102)	Coding Scheme Designator           	SH	1	4         	DCM
+            (0008,0104)	Code Meaning                       	LO	1	26        	IEC Body Dosimetry Phantom
+         (FFFE,E00D)	Item Delimitation Item             		0	          	
+      (FFFE,E0DD)	Sequence Delimitation Item         		0	          	
+   (FFFE,E00D)   	Item Delimitation Item             		0	          	
+   (FFFE,E000)   	Item                               		1	4294967295	
+      (0018,0015)	Body Part Examined                 	CS	1	4         	HEAD
+      (0018,0060)	KVP                                	DS	1	4         	120
+      (0018,1150)	Exposure Time                      	IS	1	6         	24977
+      (0018,8151)	X Ray Tube Current in µA           	DS	1	10        	145000.00
+      (0018,9302)	Acquisition Type                   	CS	1	6         	SPIRAL
+      (0018,9306)	Single Collimation Width           	FD	1	8         	1.25
+      (0018,9307)	Total Collimation Width            	FD	1	8         	20
+      (0018,9311)	Spiral Pitch Factor                	FD	1	8         	0.5600000000000001
+      (0018,9345)	CTD Ivol                           	FD	1	8         	44.38
+      (0018,9346)	CTDI Phantom Type Code Sequence    	SQ	1	4294967295	
+         (FFFE,E000)	Item                               		1	4294967295	
+            (0008,0100)	Code Value                         	SH	1	6         	113690
+            (0008,0102)	Coding Scheme Designator           	SH	1	4         	DCM
+            (0008,0104)	Code Meaning                       	LO	1	26        	IEC Head Dosimetry Phantom
+         (FFFE,E00D)	Item Delimitation Item             		0	          	
+      (FFFE,E0DD)	Sequence Delimitation Item         		0	          	
+   (FFFE,E00D)   	Item Delimitation Item             		0	          	
+(FFFE,E0DD)      	Sequence Delimitation Item         		0	          	
+(0040,0310)      	Comments On Radiation Dose         	ST	1	74        	TotalDLP=1250.42
+Event=1 DLP=1.68
+Event=2 DLP=1.68
+Event=3 DLP=1247.06
+(7FE0,0010)      	Pixel Data                         	OW	1	524288    	0000\0000\0000\0000\0000\0000\0000\0000\0000\0000\0000\0000\0000...

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(taskkill *)",
+      "Bash(timeout *)",
+      "Bash(del *)",
+      "Bash(python *)"
+    ]
+  },
+  "$version": 3
+}

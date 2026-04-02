@@ -1,6 +1,7 @@
 """
 OCR Extractor Module for Medical Scan Data
 Extracts patient information from CT scan dose report images
+Supports: JPEG, PNG, and DICOM (.dcm) formats
 """
 
 import re
@@ -11,48 +12,187 @@ from PIL import Image
 from typing import Dict, Optional
 import platform
 import os
+import sys
+
+try:
+    import pydicom
+    HAS_DICOM = True
+except ImportError:
+    HAS_DICOM = False
+    pydicom = None
+
+
+def get_tesseract_path():
+    """Get the appropriate Tesseract path based on platform and execution mode"""
+    
+    # When running as compiled executable (PyInstaller)
+    if getattr(sys, 'frozen', False):
+        # Running as compiled executable
+        application_path = sys._MEIPASS
+        tesseract_path = os.path.join(application_path, 'tesseract', 'tesseract.exe')
+        if os.path.exists(tesseract_path):
+            return tesseract_path
+    
+    # Platform-specific paths
+    system = platform.system()
+    
+    if system == "Windows":
+        # First check if tesseract exists in the same directory as the executable
+        if getattr(sys, 'frozen', False):
+            # Running as compiled executable
+            exe_dir = os.path.dirname(sys.executable)
+            tesseract_path = os.path.join(exe_dir, 'tesseract', 'tesseract.exe')
+            if os.path.exists(tesseract_path):
+                return tesseract_path
+        
+        # Check common installation paths
+        common_paths = [
+            r'C:\Program Files\Tesseract-OCR\tesseract.exe',
+            r'C:\Program Files (x86)\Tesseract-OCR\tesseract.exe',
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Programs', 'Tesseract-OCR', 'tesseract.exe'),
+        ]
+        
+        for path in common_paths:
+            if os.path.exists(path):
+                return path
+        
+        # Fallback to default path
+        return r'C:\Program Files\Tesseract-OCR\tesseract.exe'
+        
+    elif system == "Linux":
+        # Linux path (standard installation path)
+        return '/usr/bin/tesseract'
+        
+    elif system == "Darwin":  # macOS
+        return '/opt/homebrew/bin/tesseract'
+    
+    # For other systems, pytesseract will use the default path
+    return None
 
 
 class MedicalScanExtractor:
     """Extract patient data from CT scan dose report images"""
 
     def __init__(self):
-        # Configure tesseract path based on platform
-        system = platform.system()
-        
-        if system == "Windows":
-            # Windows path (adjust if Tesseract is installed elsewhere)
-            pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-        elif system == "Linux":
-            # Linux path (standard installation path)
-            pytesseract.pytesseract.tesseract_cmd = '/usr/bin/tesseract'
-        elif system == "Darwin":  # macOS
-            pytesseract.pytesseract.tesseract_cmd = '/opt/homebrew/bin/tesseract'
-        # For other systems, pytesseract will use the default path
+        # Configure tesseract path based on platform and execution mode
+        tesseract_path = get_tesseract_path()
+        if tesseract_path:
+            pytesseract.pytesseract.tesseract_cmd = tesseract_path
     
     def preprocess_image(self, image_path: str) -> np.ndarray:
         """
         Preprocess image for better OCR results
-        Optimized for medical scan dose report images with dark backgrounds
+        Enhanced for low-quality, blurry medical scan images
         """
-        # Read image
-        img = cv2.imread(image_path)
+        # Load image (handles both regular images and DICOM files)
+        img = self.load_image_for_ocr(image_path)
+        if img is None:
+            raise ValueError(f"Unsupported image format or unable to load: {image_path}")
+
+        # Apply bilateral filter to reduce noise while preserving edges
+        denoised = cv2.bilateralFilter(img, 9, 75, 75)
 
         # Convert to grayscale
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(denoised, cv2.COLOR_BGR2GRAY)
+
+        # Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)
+        # This improves contrast in local regions
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        enhanced = clahe.apply(gray)
+
+        # Apply Gaussian blur to reduce remaining noise
+        blurred = cv2.GaussianBlur(enhanced, (3, 3), 0)
 
         # Invert colors (dark background to white background for better OCR)
-        # Medical scan displays typically have white text on dark background
-        inverted = 255 - gray
+        inverted = 255 - blurred
 
-        # Apply Otsu thresholding for automatic threshold selection
-        _, thresh = cv2.threshold(inverted, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # Apply adaptive thresholding with larger block size for blurry images
+        thresh = cv2.adaptiveThreshold(
+            inverted, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            15, 5  # Larger block size and C value for smoother threshold
+        )
 
-        # Apply morphological operations to connect text characters
-        kernel = np.ones((2, 2), np.uint8)
-        denoised = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+        # Apply morphological operations to connect broken characters
+        kernel = np.ones((3, 3), np.uint8)
+        dilated = cv2.dilate(thresh, kernel, iterations=1)
+        eroded = cv2.erode(dilated, kernel, iterations=1)
 
-        return denoised
+        # Apply closing to fill gaps in characters
+        closed = cv2.morphologyEx(eroded, cv2.MORPH_CLOSE, kernel)
+
+        return closed
+
+    def preprocess_image_strong(self, image_path: str) -> np.ndarray:
+        """
+        Strong preprocessing for very low quality images
+        Uses more aggressive enhancement techniques
+        """
+        img = cv2.imread(image_path)
+        if img is None:
+            return None
+
+        # Apply non-local means denoising (stronger than bilateral)
+        denoised = cv2.fastNlMeansDenoising(img, None, 30, 7, 21)
+
+        # Convert to grayscale
+        gray = cv2.cvtColor(denoised, cv2.COLOR_BGR2GRAY)
+
+        # Apply strong CLAHE
+        clahe = cv2.createCLAHE(clipLimit=5.0, tileGridSize=(16, 16))
+        enhanced = clahe.apply(gray)
+
+        # Sharpen the image
+        kernel_sharpen = np.array([[-1, -1, -1],
+                                   [-1,  9, -1],
+                                   [-1, -1, -1]])
+        sharpened = cv2.filter2D(enhanced, -1, kernel_sharpen)
+
+        # Invert colors
+        inverted = 255 - sharpened
+
+        # Apply Otsu thresholding after Gaussian blur
+        blur = cv2.GaussianBlur(inverted, (5, 5), 0)
+        _, thresh = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+
+        # Morphological operations
+        kernel = np.ones((3, 3), np.uint8)
+        dilated = cv2.dilate(thresh, kernel, iterations=2)
+        eroded = cv2.erode(dilated, kernel, iterations=1)
+
+        return eroded
+
+    def extract_from_top_region(self, image_path: str) -> str:
+        """
+        Extract text specifically from the top region of the image
+        where patient info is typically located
+        """
+        img = cv2.imread(image_path)
+        if img is None:
+            return ""
+        
+        height, width = img.shape[:2]
+        
+        # Crop top 25% of image where patient info is located
+        y1, y2 = int(height * 0.05), int(height * 0.30)
+        x1, x2 = int(width * 0.05), int(width * 0.95)
+        top_region = img[y1:y2, x1:x2]
+        
+        # Preprocess the cropped region
+        gray = cv2.cvtColor(top_region, cv2.COLOR_BGR2GRAY)
+        blurred = cv2.GaussianBlur(gray, (3, 3), 0)
+        inverted = 255 - blurred
+        thresh = cv2.adaptiveThreshold(
+            inverted, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            11, 2
+        )
+        
+        # OCR with single block config
+        text = pytesseract.image_to_string(thresh, config=r'--oem 3 --psm 6')
+        return text
 
     def preprocess_image_alternative(self, image_path: str) -> np.ndarray:
         """
@@ -62,7 +202,7 @@ class MedicalScanExtractor:
         img = cv2.imread(image_path)
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         inverted = 255 - gray
-        
+
         # Use adaptive thresholding instead of Otsu
         adaptive = cv2.adaptiveThreshold(
             inverted, 255,
@@ -70,9 +210,58 @@ class MedicalScanExtractor:
             cv2.THRESH_BINARY,
             11, 2
         )
-        
+
         return adaptive
-    
+
+    def is_dicom_file(self, filepath: str) -> bool:
+        """Check if a file is DICOM format by reading magic number (DICM at offset 128)"""
+        try:
+            with open(filepath, 'rb') as f:
+                f.seek(128)
+                magic = f.read(4)
+                return magic == b'DICM'
+        except Exception:
+            return False
+
+    def load_image_for_ocr(self, image_path: str) -> Optional[np.ndarray]:
+        """
+        Load image for OCR processing, handling both regular images and DICOM files
+        
+        Args:
+            image_path: Path to the image file (JPEG, PNG, DICOM, etc.)
+            
+        Returns:
+            numpy array of the image or None if loading fails
+        """
+        ext = os.path.splitext(image_path)[1].lower()
+        
+        # Handle DICOM files
+        if ext == '.dcm' or self.is_dicom_file(image_path):
+            if not HAS_DICOM:
+                raise ValueError("pydicom not installed. Cannot process DICOM files.")
+            
+            # Read DICOM file
+            dicom_data = pydicom.dcmread(image_path)
+            
+            # Try to get pixel data
+            try:
+                pixel_array = dicom_data.pixel_array
+                # Convert to uint8 if needed
+                if pixel_array.dtype != np.uint8:
+                    # Normalize to 0-255
+                    pixel_array = ((pixel_array - pixel_array.min()) / (pixel_array.max() - pixel_array.min()) * 255).astype(np.uint8)
+                # Convert to BGR for OpenCV (if grayscale, convert to 3-channel)
+                if len(pixel_array.shape) == 2:
+                    pixel_array = cv2.cvtColor(pixel_array, cv2.COLOR_GRAY2BGR)
+                return pixel_array
+            except Exception as e:
+                # If pixel data extraction fails, try to save as temporary image
+                # Some DICOM files contain embedded JPEG/PNG data
+                return None
+        else:
+            # Handle regular images (JPEG, PNG, etc.)
+            return cv2.imread(image_path)
+
     def extract_data(self, image_path: str, return_debug: bool = False) -> Dict[str, Optional[str]]:
         """
         Extract patient data from the image
@@ -84,9 +273,9 @@ class MedicalScanExtractor:
         Returns:
             Dictionary with extracted fields (and debug info if requested)
         """
-        # Preprocess image with primary method
+        # Preprocess image with primary method (handles DICOM too)
         processed_img = self.preprocess_image(image_path)
-
+        
         # Perform OCR with different configurations for better accuracy
         # Config 1: Standard config for general text
         config1 = r'--oem 3 --psm 6'
@@ -530,4 +719,133 @@ class MedicalScanExtractor:
         if os.path.exists(temp_path):
             os.remove(temp_path)
 
+        return result
+
+    def extract_from_dicom(self, dicom_path: str, return_debug: bool = False) -> Dict[str, Optional[str]]:
+        """
+        Extract data from DICOM file
+        
+        DICOM files can contain both pixel data (images) and metadata
+        
+        Args:
+            dicom_path: Path to the DICOM file (.dcm)
+            return_debug: If True, include debug info in result
+            
+        Returns:
+            Dictionary with extracted fields (and debug info if requested)
+        """
+        if not HAS_DICOM:
+            raise ImportError("pydicom is required for DICOM support. Install with: pip install pydicom")
+        
+        result = {}
+        
+        try:
+            # Read DICOM file
+            ds = pydicom.dcmread(dicom_path)
+            
+            # Try to extract data from DICOM metadata first (more accurate)
+            # Patient Name
+            if hasattr(ds, 'PatientName') and ds.PatientName:
+                result['nama_pasien'] = str(ds.PatientName)
+            
+            # Patient ID
+            if hasattr(ds, 'PatientID') and ds.PatientID:
+                result['id_pasien'] = str(ds.PatientID)
+            
+            # Study Date (format: YYYYMMDD)
+            if hasattr(ds, 'StudyDate') and ds.StudyDate:
+                date_str = str(ds.StudyDate)
+                if len(date_str) == 8:
+                    # Convert YYYYMMDD to DD Mon YYYY
+                    year = date_str[0:4]
+                    month = date_str[4:6]
+                    day = date_str[6:8]
+                    month_names = {
+                        '01': 'Jan', '02': 'Feb', '03': 'Mar', '04': 'Apr',
+                        '05': 'Mei', '06': 'Jun', '07': 'Jul', '08': 'Agu',
+                        '09': 'Sep', '10': 'Okt', '11': 'Nov', '12': 'Des'
+                    }
+                    month_name = month_names.get(month, month)
+                    result['tanggal_pemeriksaan'] = f"{day} {month_name} {year}"
+            
+            # Modality (Exam type)
+            if hasattr(ds, 'Modality') and ds.Modality:
+                result['jenis_pemeriksaan'] = str(ds.Modality)
+            
+            # Study Description (more detailed exam description)
+            if hasattr(ds, 'StudyDescription') and ds.StudyDescription:
+                study_desc = str(ds.StudyDescription)
+                if study_desc and (not result.get('jenis_pemeriksaan') or len(study_desc) > len(result.get('jenis_pemeriksaan', ''))):
+                    result['jenis_pemeriksaan'] = study_desc
+            
+            # Check if we have all required fields from metadata
+            has_all_data = all([
+                result.get('nama_pasien'),
+                result.get('tanggal_pemeriksaan'),
+                result.get('id_pasien'),
+                result.get('ctdi_vol'),
+                result.get('total_dlp')
+            ])
+            
+            # If we don't have all data from metadata, try OCR on the image
+            if not has_all_data and hasattr(ds, 'pixel_array'):
+                # Get pixel data
+                pixel_array = ds.pixel_array
+                
+                # Convert to uint8 if needed
+                if pixel_array.dtype != np.uint8:
+                    pixel_array = ((pixel_array - pixel_array.min()) / (pixel_array.max() - pixel_array.min()) * 255).astype(np.uint8)
+                
+                # Convert to RGB if grayscale
+                if len(pixel_array.shape) == 2:
+                    img_rgb = cv2.cvtColor(pixel_array, cv2.COLOR_GRAY2BGR)
+                else:
+                    img_rgb = cv2.cvtColor(pixel_array, cv2.COLOR_RGB2BGR)
+                
+                # Save temporarily for OCR processing
+                temp_path = 'temp_dicom.png'
+                cv2.imwrite(temp_path, img_rgb)
+                
+                # Extract data using OCR
+                ocr_result = self.extract_data(temp_path, return_debug=False)
+                
+                # Merge OCR results with metadata (metadata takes precedence)
+                for key in ['nama_pasien', 'tanggal_pemeriksaan', 'id_pasien', 'jenis_pemeriksaan', 'ctdi_vol', 'total_dlp']:
+                    if key not in result or not result[key]:
+                        result[key] = ocr_result.get(key)
+                
+                # Clean up
+                if os.path.exists(temp_path):
+                    os.remove(temp_path)
+            
+            # Fill in missing fields with None
+            for key in ['nama_pasien', 'tanggal_pemeriksaan', 'id_pasien', 'jenis_pemeriksaan', 'ctdi_vol', 'total_dlp']:
+                if key not in result:
+                    result[key] = None
+            
+            # Add debug info if requested
+            if return_debug:
+                result['_debug_source'] = 'DICOM metadata + OCR'
+                result['_debug_dicom_tags'] = {
+                    'PatientName': str(ds.PatientName) if hasattr(ds, 'PatientName') else None,
+                    'PatientID': str(ds.PatientID) if hasattr(ds, 'PatientID') else None,
+                    'StudyDate': str(ds.StudyDate) if hasattr(ds, 'StudyDate') else None,
+                    'Modality': str(ds.Modality) if hasattr(ds, 'Modality') else None,
+                    'StudyDescription': str(ds.StudyDescription) if hasattr(ds, 'StudyDescription') else None,
+                }
+            
+        except Exception as e:
+            # If DICOM processing fails, return empty result
+            result = {
+                'nama_pasien': None,
+                'tanggal_pemeriksaan': None,
+                'id_pasien': None,
+                'jenis_pemeriksaan': None,
+                'ctdi_vol': None,
+                'total_dlp': None,
+            }
+            if return_debug:
+                result['_debug_error'] = str(e)
+                result['_debug_source'] = 'DICOM failed'
+        
         return result

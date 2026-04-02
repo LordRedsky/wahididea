@@ -27,7 +27,7 @@ class ExcelHandler:
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "Data Pasien"
-        
+
         # Headers
         headers = [
             "No",
@@ -35,53 +35,56 @@ class ExcelHandler:
             "Nama Pasien",
             "Tanggal Pemeriksaan",
             "ID Pasien",
+            "Umur Pasien",
+            "Jenis Kelamin",
             "Jenis Pemeriksaan",
+            "Tegangan (kV)",
             "CTDIvol (mGy)",
             "Total DLP (mGy·cm)"
         ]
-        
+
         for col, header in enumerate(headers, 1):
             ws.cell(row=1, column=col, value=header)
-        
+
         # Style headers
         self._style_headers(ws)
-        
+
         wb.save(self.filename)
-    
+
     def _style_headers(self, ws):
         """Apply styling to header row"""
         from openpyxl.styles import Font, PatternFill, Alignment
-        
+
         header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
         header_font = Font(bold=True, color="FFFFFF", size=11)
         header_alignment = Alignment(horizontal="center", vertical="center")
-        
+
         for cell in ws[1]:
             cell.fill = header_fill
             cell.font = header_font
             cell.alignment = header_alignment
-        
+
         # Auto-adjust column widths
-        column_widths = [8, 15, 25, 20, 15, 30, 15, 15]
+        column_widths = [8, 15, 25, 20, 15, 12, 12, 30, 10, 15, 15]
         for i, width in enumerate(column_widths, 1):
             ws.column_dimensions[chr(64 + i)].width = width
-    
+
     def add_record(self, data: Dict[str, Optional[str]]) -> int:
         """
         Add a new record to Excel file
-        
+
         Args:
             data: Dictionary with extracted patient data
-            
+
         Returns:
             Row number where data was added
         """
         wb = load_workbook(self.filename)
         ws = wb.active
-        
+
         # Get next row number
         next_row = ws.max_row + 1
-        
+
         # Prepare data
         record = [
             next_row - 1,  # No (sequential)
@@ -89,15 +92,18 @@ class ExcelHandler:
             data.get('nama_pasien', ''),
             data.get('tanggal_pemeriksaan', ''),
             data.get('id_pasien', ''),
+            data.get('umur_pasien', ''),
+            data.get('jenis_kelamin', ''),
             data.get('jenis_pemeriksaan', ''),
+            data.get('kv', ''),
             data.get('ctdi_vol', ''),
             data.get('total_dlp', '')
         ]
-        
+
         # Write data
         for col, value in enumerate(record, 1):
             ws.cell(row=next_row, column=col, value=value)
-        
+
         wb.save(self.filename)
         return next_row - 1
     
