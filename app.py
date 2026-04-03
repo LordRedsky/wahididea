@@ -14,6 +14,10 @@ import tempfile
 import io
 import re
 from datetime import datetime
+import plotly.express as px
+import plotly.graph_objects as go
+import pandas as pd
+import numpy as np
 
 try:
     import pydicom
@@ -34,9 +38,11 @@ st.markdown("""
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 """, unsafe_allow_html=True)
 
-# Initialize theme state
+# Initialize states
 if 'theme' not in st.session_state:
     st.session_state['theme'] = 'light'
+if 'page' not in st.session_state:
+    st.session_state['page'] = 'dashboard'
 
 # Custom CSS - Clean Medical Theme with Dark Mode Support & Mobile Responsive
 st.markdown("""
@@ -420,17 +426,17 @@ def extract_from_dicom_text(txt_content):
             if match:
                 age_num = match.group(1).strip()
                 age_unit = match.group(2).strip()
-                # Convert to readable format
+                # Store only numeric value for easier data processing
                 if age_unit == 'Y':
-                    result['umur_pasien'] = f"{int(age_num)} Tahun"
+                    result['umur_pasien'] = int(age_num)
                 elif age_unit == 'M':
-                    result['umur_pasien'] = f"{int(age_num)} Bulan"
+                    result['umur_pasien'] = int(age_num)
                 elif age_unit == 'W':
-                    result['umur_pasien'] = f"{int(age_num)} Minggu"
+                    result['umur_pasien'] = int(age_num)
                 elif age_unit == 'D':
-                    result['umur_pasien'] = f"{int(age_num)} Hari"
+                    result['umur_pasien'] = int(age_num)
                 else:
-                    result['umur_pasien'] = f"{age_num} {age_unit}"
+                    result['umur_pasien'] = int(age_num)
                 break
     
     # Extract Patient Sex - look for (0010,0040) Patient Sex
@@ -509,34 +515,253 @@ def extract_from_dicom_text(txt_content):
     return result
 
 
-def main():
-    # Initialize handlers
-    extractor = MedicalScanExtractor()
+def prepare_dashboard_data(records):
+    """Prepare data for dashboard visualization"""
+    if not records:
+        return pd.DataFrame()
+    
+    df = pd.DataFrame(records)
+    
+    # Clean and process data
+    if 'Umur Pasien' in df.columns:
+        # Extract numeric age
+        df['Age'] = df['Umur Pasien'].astype(str).str.extract(r'(\d+)').astype(float)
+    
+    if 'CTDIvol' in df.columns:
+        df['CTDIvol'] = pd.to_numeric(df['CTDIvol'], errors='coerce')
+    
+    if 'Total DLP' in df.columns:
+        df['Total DLP'] = pd.to_numeric(df['Total DLP'], errors='coerce')
+    
+    return df
+
+
+def render_dashboard():
+    """Render the dashboard page with charts and filters"""
     excel_handler = ExcelHandler()
+    records = excel_handler.get_all_records()
     
-    # Theme toggle button
-    current_theme = st.session_state.get('theme', 'light')
-    new_theme = 'dark' if current_theme == 'light' else 'light'
-    theme_icon = "🌙" if current_theme == 'light' else "☀️"
-    theme_label = "Dark Mode" if current_theme == 'light' else "Light Mode"
-    
-    if st.button(f"{theme_icon} {theme_label}", key="theme_toggle"):
-        st.session_state['theme'] = new_theme
-        st.rerun()
-    
-    # Apply theme class
-    theme_class = st.session_state.get('theme', 'light')
-    st.markdown(f'<div class="{theme_class}">', unsafe_allow_html=True)
-    
-    # Header Section - Clean & Elegant
+    # Header
     st.markdown("""
         <div class="app-header">
-            <h1 class="app-title">🏥 Radiation Dose Recorder</h1>
-            <p class="app-subtitle">Extract and manage patient radiation dose data from CT scan reports</p>
+            <h1 class="app-title">🏥 Radiation Dose Dashboard</h1>
+            <p class="app-subtitle">Interactive visualization of patient radiation dose data</p>
         </div>
     """, unsafe_allow_html=True)
     
-    # Quick Stats Bar
+    # Action buttons
+    col_btn1, col_btn2 = st.columns([1, 4])
+    with col_btn1:
+        if st.button("📤 Upload Data", type="primary", use_container_width=True):
+            st.session_state['page'] = 'upload'
+            st.rerun()
+    with col_btn2:
+        if st.button("🔄 Refresh Data", use_container_width=True):
+            st.rerun()
+    
+    if not records:
+        st.info("📭 No data available yet. Click 'Upload Data' to start extracting patient data.")
+        return
+    
+    # Prepare data
+    df = prepare_dashboard_data(records)
+    
+    # Filters
+    st.markdown("### 🔍 Filters")
+    col_f1, col_f2, col_f3 = st.columns(3)
+    
+    with col_f1:
+        gender_options = ['All'] + list(df['Jenis Kelamin'].dropna().unique()) if 'Jenis Kelamin' in df.columns else ['All']
+        selected_gender = st.selectbox("Jenis Kelamin", gender_options)
+    
+    with col_f2:
+        exam_options = ['All'] + list(df['Jenis Pemeriksaan'].dropna().unique()) if 'Jenis Pemeriksaan' in df.columns else ['All']
+        selected_exam = st.selectbox("Jenis Pemeriksaan", exam_options)
+    
+    with col_f3:
+        if 'Age' in df.columns:
+            age_min = int(df['Age'].min())
+            age_max = int(df['Age'].max())
+            # Handle case where min equals max
+            if age_min == age_max:
+                age_min = max(0, age_min - 10)
+                age_max = age_max + 10
+            age_range = (age_min, age_max)
+            selected_age = st.slider("Usia (Tahun)", age_min, age_max, age_range)
+        else:
+            selected_age = None
+    
+    # Apply filters
+    filtered_df = df.copy()
+    if selected_gender != 'All':
+        filtered_df = filtered_df[filtered_df['Jenis Kelamin'] == selected_gender]
+    if selected_exam != 'All':
+        filtered_df = filtered_df[filtered_df['Jenis Pemeriksaan'] == selected_exam]
+    if selected_age:
+        filtered_df = filtered_df[(filtered_df['Age'] >= selected_age[0]) & (filtered_df['Age'] <= selected_age[1])]
+    
+    # Summary Stats
+    st.markdown("---")
+    st.markdown("### 📊 Summary Statistics")
+    
+    col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+    with col_s1:
+        st.markdown(f"""
+            <div class="metric-card">
+                <div style="font-size: 0.875rem; color: #64748b;">Total Patients</div>
+                <div style="font-size: 2rem; font-weight: 700; color: #0ea5e9;">{len(filtered_df)}</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with col_s2:
+        avg_age = filtered_df['Age'].mean() if 'Age' in filtered_df.columns and not filtered_df['Age'].empty else 0
+        st.markdown(f"""
+            <div class="metric-card">
+                <div style="font-size: 0.875rem; color: #64748b;">Avg Age</div>
+                <div style="font-size: 2rem; font-weight: 700; color: #0ea5e9;">{avg_age:.0f}</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with col_s3:
+        avg_ctdi = filtered_df['CTDIvol'].mean() if 'CTDIvol' in filtered_df.columns and not filtered_df['CTDIvol'].empty else 0
+        st.markdown(f"""
+            <div class="metric-card">
+                <div style="font-size: 0.875rem; color: #64748b;">Avg CTDIvol</div>
+                <div style="font-size: 1.5rem; font-weight: 700; color: #ea580c;">{avg_ctdi:.1f} mGy</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with col_s4:
+        avg_dlp = filtered_df['Total DLP'].mean() if 'Total DLP' in filtered_df.columns and not filtered_df['Total DLP'].empty else 0
+        st.markdown(f"""
+            <div class="metric-card">
+                <div style="font-size: 0.875rem; color: #64748b;">Avg DLP</div>
+                <div style="font-size: 1.5rem; font-weight: 700; color: #dc2626;">{avg_dlp:.1f} mGy·cm</div>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    # Charts
+    st.markdown("---")
+    st.markdown("### 📈 Data Visualization")
+    
+    # Row 1: Gender & Exam Type
+    col_c1, col_c2 = st.columns(2)
+    
+    with col_c1:
+        st.markdown("#### 👥 Gender Distribution")
+        if 'Jenis Kelamin' in filtered_df.columns and not filtered_df['Jenis Kelamin'].empty:
+            gender_counts = filtered_df['Jenis Kelamin'].value_counts()
+            fig = px.pie(
+                values=gender_counts.values,
+                names=gender_counts.index,
+                color_discrete_sequence=['#0ea5e9', '#f472b6', '#a78bfa'],
+                hole=0.4
+            )
+            fig.update_layout(
+                height=300,
+                margin=dict(l=20, r=20, t=20, b=20),
+                legend=dict(orientation="h", yanchor="bottom", y=-0.2, xanchor="center", x=0.5)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No gender data available")
+    
+    with col_c2:
+        st.markdown("#### 🔬 Exam Type Distribution")
+        if 'Jenis Pemeriksaan' in filtered_df.columns and not filtered_df['Jenis Pemeriksaan'].empty:
+            exam_counts = filtered_df['Jenis Pemeriksaan'].value_counts().head(10)
+            fig = px.bar(
+                x=exam_counts.values,
+                y=exam_counts.index,
+                orientation='h',
+                color=exam_counts.values,
+                color_continuous_scale='Blues'
+            )
+            fig.update_layout(
+                height=300,
+                margin=dict(l=20, r=20, t=20, b=20),
+                xaxis_title="Count",
+                showlegend=False
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No exam type data available")
+    
+    # Row 2: Age Distribution & CTDIvol vs DLP
+    col_c3, col_c4 = st.columns(2)
+    
+    with col_c3:
+        st.markdown("#### 🎂 Age Distribution")
+        if 'Age' in filtered_df.columns and not filtered_df['Age'].dropna().empty:
+            fig = px.histogram(
+                filtered_df,
+                x='Age',
+                nbins=20,
+                color_discrete_sequence=['#0ea5e9']
+            )
+            fig.update_layout(
+                height=300,
+                margin=dict(l=20, r=20, t=20, b=20),
+                xaxis_title="Age (Years)",
+                yaxis_title="Count"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No age data available")
+    
+    with col_c4:
+        st.markdown("#### ⚡ CTDIvol vs Total DLP")
+        if 'CTDIvol' in filtered_df.columns and 'Total DLP' in filtered_df.columns:
+            valid_data = filtered_df.dropna(subset=['CTDIvol', 'Total DLP'])
+            if not valid_data.empty:
+                fig = px.scatter(
+                    valid_data,
+                    x='CTDIvol',
+                    y='Total DLP',
+                    size='CTDIvol',
+                    color='Jenis Kelamin' if 'Jenis Kelamin' in valid_data.columns else None,
+                    hover_data=['Nama Pasien'] if 'Nama Pasien' in valid_data.columns else None,
+                    color_discrete_sequence=['#0ea5e9', '#f472b6', '#a78bfa']
+                )
+                fig.update_layout(
+                    height=300,
+                    margin=dict(l=20, r=20, t=20, b=20),
+                    xaxis_title="CTDIvol (mGy)",
+                    yaxis_title="Total DLP (mGy·cm)"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("No dose data available")
+        else:
+            st.info("No dose data available")
+    
+    # Data Table
+    st.markdown("---")
+    st.markdown("### 📋 Patient Data Table")
+    
+    # Show only relevant columns
+    display_cols = ['Nama Pasien', 'Jenis Kelamin', 'Umur Pasien', 'Jenis Pemeriksaan', 'CTDIvol', 'Total DLP']
+    display_df = filtered_df[[c for c in display_cols if c in filtered_df.columns]]
+    
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+
+def render_upload_page():
+    """Render the upload and extraction page"""
+    extractor = MedicalScanExtractor()
+    excel_handler = ExcelHandler()
+    
+    # Back button
+    if st.button("← Back to Dashboard", key="back_to_dashboard"):
+        st.session_state['page'] = 'dashboard'
+        st.rerun()
+    
+    # Header
+    st.markdown("""
+        <div class="app-header">
+            <h1 class="app-title">📤 Upload & Extract Data</h1>
+            <p class="app-subtitle">Upload CT scan dose report images to extract patient data</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Quick Stats
     record_count = excel_handler.get_record_count()
     col_s1, col_s2 = st.columns(2)
     with col_s1:
@@ -796,6 +1021,28 @@ def main():
             )
     else:
         st.info("📭 No records yet. Upload and extract your first CT scan report.")
+
+
+def main():
+    # Theme toggle button
+    current_theme = st.session_state.get('theme', 'light')
+    new_theme = 'dark' if current_theme == 'light' else 'light'
+    theme_icon = "🌙" if current_theme == 'light' else "☀️"
+    theme_label = "Dark Mode" if current_theme == 'light' else "Light Mode"
+    
+    if st.button(f"{theme_icon} {theme_label}", key="theme_toggle"):
+        st.session_state['theme'] = new_theme
+        st.rerun()
+    
+    # Apply theme class
+    theme_class = st.session_state.get('theme', 'light')
+    st.markdown(f'<div class="{theme_class}">', unsafe_allow_html=True)
+    
+    # Route to appropriate page
+    if st.session_state.get('page') == 'upload':
+        render_upload_page()
+    else:
+        render_dashboard()
     
     # Footer
     st.markdown("---")
