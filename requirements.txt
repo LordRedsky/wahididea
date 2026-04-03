@@ -15,3 +15,7 @@ pydicom>=3.0.0
 pylibjpeg>=2.0
 pylibjpeg-libjpeg>=2.1
 pylibjpeg-openjpeg>=2.0
+
+# Data Visualization
+plotly>=5.18.0
+pandas>=2.0.0
