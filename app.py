@@ -13,6 +13,7 @@ import platform
 import tempfile
 import io
 import re
+from datetime import datetime
 
 try:
     import pydicom
@@ -20,42 +21,332 @@ except ImportError:
     pydicom = None
 
 
-# Page configuration
+# Page configuration - Set default theme to light
 st.set_page_config(
-    page_title="Medical Scan Data Extractor",
+    page_title="Radiation Dose Recorder",
     page_icon="🏥",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# Custom CSS for better styling
+# Add viewport meta tag for mobile responsiveness
+st.markdown("""
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+""", unsafe_allow_html=True)
+
+# Initialize theme state
+if 'theme' not in st.session_state:
+    st.session_state['theme'] = 'light'
+
+# Custom CSS - Clean Medical Theme with Dark Mode Support & Mobile Responsive
 st.markdown("""
     <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1E88E5;
+    /* Light Mode - Default (always active with !important to override Streamlit) */
+    .main {
+        background-color: #f8fafc !important;
+    }
+
+    .app-header {
+        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+    }
+
+    .app-title {
+        color: white !important;
+    }
+
+    .app-subtitle {
+        color: #e0f2fe !important;
+    }
+
+    .data-card {
+        background: white !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+    }
+
+    .card-label {
+        color: #64748b !important;
+    }
+
+    .card-value {
+        color: #0f172a !important;
+    }
+
+    .upload-section {
+        background: white !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+    }
+
+    .metric-card {
+        background: white !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+    }
+
+    /* Dark Mode - Only active when .dark class is present */
+    .dark .main {
+        background-color: #0f172a !important;
+    }
+
+    .dark .app-header {
+        background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+    }
+
+    .dark .app-title {
+        color: #f8fafc !important;
+    }
+
+    .dark .app-subtitle {
+        color: #bfdbfe !important;
+    }
+
+    .dark .data-card {
+        background: #1e293b !important;
+        border: 1px solid #334155 !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    .dark .card-label {
+        color: #94a3b8 !important;
+    }
+
+    .dark .card-value {
+        color: #f1f5f9 !important;
+    }
+
+    .dark .upload-section {
+        background: #1e293b !important;
+        border: 1px solid #334155 !important;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    .dark .metric-card {
+        background: #1e293b !important;
+        border: 1px solid #334155 !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+    }
+
+    /* Common styles */
+    .app-header {
         text-align: center;
+        padding: 2rem 0;
+        border-radius: 12px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+    
+    .app-title {
+        font-size: 2.5rem;
+        font-weight: 700;
+        margin: 0;
+        letter-spacing: -0.5px;
+    }
+    
+    .app-subtitle {
+        font-size: 1.1rem;
+        margin: 0.5rem 0 0 0;
+        font-weight: 400;
+    }
+    
+    .data-card {
+        border-radius: 10px;
+        padding: 1.5rem;
         margin-bottom: 1rem;
     }
-    .sub-header {
-        font-size: 1.2rem;
-        color: #666;
+    
+    .card-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        margin-bottom: 0.25rem;
+    }
+    
+    .card-value {
+        font-size: 1.125rem;
+        font-weight: 600;
+    }
+    
+    .upload-section {
+        border-radius: 10px;
+        padding: 2rem;
+    }
+    
+    .metric-card {
+        border-radius: 8px;
+        padding: 1rem;
         text-align: center;
-        margin-bottom: 2rem;
     }
-    .success-box {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        background-color: #E8F5E9;
-        border-left: 5px solid #4CAF50;
-        margin: 1rem 0;
+    
+    /* Hide default Streamlit elements for cleaner look */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* Button styling */
+    .stButton>button {
+        border-radius: 8px;
+        font-weight: 500;
     }
-    .data-card {
-        padding: 1rem;
-        border-radius: 0.5rem;
-        background-color: #f5f5f5;
-        margin: 0.5rem 0;
+    
+    /* Dataframe styling */
+    .dataframe {
+        border-radius: 8px;
+        overflow: hidden;
+    }
+    
+    /* Theme toggle button */
+    .theme-toggle {
+        position: fixed;
+        top: 1rem;
+        right: 1rem;
+        z-index: 1000;
+        background: rgba(255, 255, 255, 0.1);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 50px;
+        padding: 0.5rem 1rem;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .theme-toggle:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: scale(1.05);
+    }
+    
+    .dark .theme-toggle {
+        background: rgba(30, 41, 59, 0.8);
+        border: 1px solid rgba(100, 116, 139, 0.3);
+    }
+    
+    .dark .theme-toggle:hover {
+        background: rgba(30, 41, 59, 0.9);
+    }
+    
+    /* Mobile Responsive Design */
+    @media (max-width: 768px) {
+        .app-header {
+            padding: 1.5rem 1rem;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+        }
+        
+        .app-title {
+            font-size: 1.75rem;
+            letter-spacing: 0;
+        }
+        
+        .app-subtitle {
+            font-size: 0.9rem;
+            padding: 0 0.5rem;
+        }
+        
+        .metric-card {
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .metric-card > div:first-child {
+            font-size: 0.75rem !important;
+        }
+        
+        .metric-card > div:last-child {
+            font-size: 1.5rem !important;
+        }
+        
+        .data-card {
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .card-label {
+            font-size: 0.75rem;
+        }
+        
+        .card-value {
+            font-size: 1rem;
+        }
+        
+        .upload-section {
+            padding: 1rem;
+        }
+        
+        /* Make columns stack on mobile */
+        .stColumn > div {
+            margin-bottom: 0.5rem;
+        }
+        
+        /* Better touch targets for mobile */
+        .stButton>button {
+            min-height: 44px;
+            padding: 0.75rem 1rem;
+        }
+        
+        /* Improve file uploader on mobile */
+        .stFileUploader > div {
+            min-height: 100px;
+        }
+        
+        /* Make text inputs more touch-friendly */
+        .stTextInput input,
+        .stTextArea textarea {
+            font-size: 16px !important; /* Prevents zoom on iOS */
+        }
+        
+        /* Better spacing for sections */
+        h3 {
+            font-size: 1.25rem !important;
+            margin-top: 1rem !important;
+            margin-bottom: 0.5rem !important;
+        }
+        
+        /* Optimize data table for mobile */
+        .dataframe {
+            font-size: 0.875rem;
+        }
+        
+        /* Make download buttons full width on mobile */
+        .stDownloadButton>button {
+            width: 100%;
+            min-height: 44px;
+        }
+    }
+    
+    /* Tablet optimizations */
+    @media (min-width: 769px) and (max-width: 1024px) {
+        .app-title {
+            font-size: 2rem;
+        }
+        
+        .app-subtitle {
+            font-size: 1rem;
+        }
+        
+        .metric-card {
+            padding: 0.875rem;
+        }
+    }
+    
+    /* Ensure smooth transitions */
+    * {
+        transition: background-color 0.3s ease, color 0.3s ease;
+    }
+    
+    /* Prevent horizontal scroll */
+    .block-container {
+        max-width: 100%;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+    
+    @media (min-width: 1200px) {
+        .block-container {
+            max-width: 1200px;
+            padding-left: 2rem;
+            padding-right: 2rem;
+        }
     }
     </style>
 """, unsafe_allow_html=True)
@@ -219,370 +510,308 @@ def extract_from_dicom_text(txt_content):
 
 
 def main():
-    # Header
-    st.markdown('<p class="main-header">🏥 Medical Scan Data Extractor</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-header">Extract patient data from CT scan dose report images using OCR</p>', unsafe_allow_html=True)
-    
     # Initialize handlers
     extractor = MedicalScanExtractor()
     excel_handler = ExcelHandler()
     
-    # Sidebar
-    with st.sidebar:
-        st.header("📊 Statistics")
-        record_count = excel_handler.get_record_count()
-        st.metric("Total Records", record_count)
-
-        st.divider()
-
-        # Tesseract Verification
-        st.header("🔍 System Status")
-        try:
-            # Check if tesseract is available
-            result = subprocess.run(
-                ['tesseract', '--version'],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if result.returncode == 0:
-                st.success("✅ Tesseract installed")
-                version_line = result.stdout.split('\n')[0]
-                st.caption(version_line)
-            else:
-                st.error("❌ Tesseract not found")
-        except FileNotFoundError:
-            st.error("❌ Tesseract not found")
-            st.caption("Installing from packages.txt...")
-            st.caption("First deployment takes 5-10 minutes")
-        except Exception as e:
-            st.error(f"❌ Error: {str(e)}")
-
-        st.divider()
-
-        # Debug options
-        st.header("🐛 Debug")
-        debug_mode = st.checkbox("Enable OCR Debug", value=False, help="Show OCR text output")
-        if debug_mode:
-            st.session_state['debug_ocr'] = True
-            st.info("Debug mode enabled")
-        else:
-            st.session_state['debug_ocr'] = False
-
-        st.divider()
-
-        st.header("ℹ️ Information")
-        st.markdown("""
-        **Extracted Fields:**
-        - Nama Pasien
-        - Tanggal Pemeriksaan
-        - ID Pasien
-        - Umur Pasien
-        - Jenis Kelamin
-        - Jenis Pemeriksaan
-        - Tegangan (kV)
-        - CTDIvol (mGy)
-        - Total DLP (mGy·cm)
-        """)
-
-        st.divider()
-
-        if st.button("🗑️ Clear All Data", type="secondary", use_container_width=True):
-            excel_handler.clear_all_data()
-            st.success("All data cleared!")
-            st.rerun()
+    # Theme toggle button
+    current_theme = st.session_state.get('theme', 'light')
+    new_theme = 'dark' if current_theme == 'light' else 'light'
+    theme_icon = "🌙" if current_theme == 'light' else "☀️"
+    theme_label = "Dark Mode" if current_theme == 'light' else "Light Mode"
     
-    # Main content - two columns
-    col1, col2 = st.columns([1, 1], gap="large")
+    if st.button(f"{theme_icon} {theme_label}", key="theme_toggle"):
+        st.session_state['theme'] = new_theme
+        st.rerun()
+    
+    # Apply theme class
+    theme_class = st.session_state.get('theme', 'light')
+    st.markdown(f'<div class="{theme_class}">', unsafe_allow_html=True)
+    
+    # Header Section - Clean & Elegant
+    st.markdown("""
+        <div class="app-header">
+            <h1 class="app-title">🏥 Radiation Dose Recorder</h1>
+            <p class="app-subtitle">Extract and manage patient radiation dose data from CT scan reports</p>
+        </div>
+    """, unsafe_allow_html=True)
+    
+    # Quick Stats Bar
+    record_count = excel_handler.get_record_count()
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        st.markdown(f"""
+            <div class="metric-card">
+                <div style="font-size: 0.875rem; color: #64748b;">Total Records</div>
+                <div style="font-size: 2rem; font-weight: 700; color: #0ea5e9;">{record_count}</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with col_s2:
+        if record_count > 0:
+            records = excel_handler.get_all_records()
+            unique_patients = len(set(r.get('Nama Pasien', '') for r in records if r.get('Nama Pasien')))
+            st.markdown(f"""
+                <div class="metric-card">
+                    <div style="font-size: 0.875rem; color: #64748b;">Patients</div>
+                    <div style="font-size: 2rem; font-weight: 700; color: #0ea5e9;">{unique_patients}</div>
+                </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+                <div class="metric-card">
+                    <div style="font-size: 0.875rem; color: #64748b;">Patients</div>
+                    <div style="font-size: 2rem; font-weight: 700; color: #0ea5e9;">0</div>
+                </div>
+            """, unsafe_allow_html=True)
 
-    with col1:
-        st.header("📤 Upload File")
-
-        uploaded_file = st.file_uploader(
-            "Choose a CT scan dose report file",
-            type=["jpg", "jpeg", "png", "dcm", "dicom", "txt"],
-            help="Upload a clear image of the CT scan dose report (JPG, PNG, DICOM, or TXT format)"
-        )
+    st.markdown("---")
+    
+    # Main Workflow Section
+    # Step 1: Upload
+    st.markdown("### 📤 Step 1: Upload CT Scan Report")
+    st.markdown("<p style='color: #64748b; margin-top: -1rem;'>Upload a clear image of the dose report (JPG, PNG, DICOM, or TXT)</p>", unsafe_allow_html=True)
+    
+    uploaded_file = st.file_uploader(
+        "",
+        type=["jpg", "jpeg", "png", "dcm", "dicom", "txt"],
+        label_visibility="collapsed"
+    )
+    
+    if uploaded_file is not None:
+        file_bytes = uploaded_file.read()
+        file_name = uploaded_file.name
+        file_ext = os.path.splitext(file_name)[1].lower()
+        uploaded_file.seek(0)
         
-        if uploaded_file is not None:
-            # Get file bytes
-            file_bytes = uploaded_file.read()
-            file_name = uploaded_file.name
-            file_ext = os.path.splitext(file_name)[1].lower()
-            
-            # Reset file pointer
-            uploaded_file.seek(0)
-            
-            # Check if it's a DICOM file by magic number
-            is_dicom = file_bytes[128:132] == b'DICM' if len(file_bytes) > 132 else False
-            
-            # Handle TXT file (DICOM text dump)
+        is_dicom = file_bytes[128:132] == b'DICM' if len(file_bytes) > 132 else False
+        
+        # Display uploaded file
+        col_preview, col_action = st.columns([2, 1])
+        
+        with col_preview:
             if file_ext == '.txt':
-                st.info("📄 TXT file detected (DICOM text dump)")
-                
-                # Read content with encoding fallback
-                try:
-                    # Try UTF-8 first
-                    try:
-                        txt_content = file_bytes.decode('utf-8')
-                    except UnicodeDecodeError:
-                        # Fallback to latin-1 (can decode any byte sequence)
-                        txt_content = file_bytes.decode('latin-1')
-                    
-                    # Extract button
-                    if st.button("🔍 Extract Data", type="primary", use_container_width=True):
-                        with st.spinner("Processing TXT file... Please wait."):
-                            extracted_data = extract_from_dicom_text(txt_content)
-                            
-                            # Store in session state
-                            st.session_state['extracted_data'] = extracted_data
-                            st.session_state['image_uploaded'] = True
-                            st.session_state['is_dicom'] = False
-
-                        st.success("Data extracted successfully!")
-                        
-                except Exception as e:
-                    st.error(f"Error reading TXT file: {str(e)}")
-            
-            # Handle DICOM file
+                st.info("📄 Text file (DICOM dump)")
             elif is_dicom or file_ext in ['.dcm', '.dicom']:
-                # Handle DICOM file
                 st.info("📋 DICOM file detected")
-
-                # Save to temporary file for processing
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.dcm') as tmp_file:
-                    tmp_file.write(file_bytes)
-                    temp_dicom_path = tmp_file.name
-
-                try:
-                    # Extract metadata from DICOM
-                    if HAS_DICOM and pydicom:
-                        ds = pydicom.dcmread(temp_dicom_path)
-
-                        # Extract button for DICOM
-                        if st.button("🔍 Extract Data", type="primary", use_container_width=True):
-                            with st.spinner("Processing DICOM file... Please wait."):
+            else:
+                image = Image.open(uploaded_file)
+                st.image(image, use_container_width=True)
+        
+        with col_action:
+            st.markdown("**Ready to extract**")
+            if st.button("🔍 Extract Data", type="primary", use_container_width=True):
+                with st.spinner("Processing..."):
+                    extracted_data = None
+                    
+                    if file_ext == '.txt':
+                        try:
+                            try:
+                                txt_content = file_bytes.decode('utf-8')
+                            except UnicodeDecodeError:
+                                txt_content = file_bytes.decode('latin-1')
+                            extracted_data = extract_from_dicom_text(txt_content)
+                        except Exception as e:
+                            st.error(f"Error: {str(e)}")
+                    
+                    elif is_dicom or file_ext in ['.dcm', '.dicom']:
+                        with tempfile.NamedTemporaryFile(delete=False, suffix='.dcm') as tmp_file:
+                            tmp_file.write(file_bytes)
+                            temp_dicom_path = tmp_file.name
+                        
+                        try:
+                            if HAS_DICOM and pydicom:
                                 debug_mode = st.session_state.get('debug_ocr', False)
                                 extracted_data = extractor.extract_from_dicom(temp_dicom_path, return_debug=debug_mode)
-
-                                # Clean up temp file
                                 os.unlink(temp_dicom_path)
-
-                                # Store in session state
-                                st.session_state['extracted_data'] = extracted_data
-                                st.session_state['image_uploaded'] = True
-                                st.session_state['is_dicom'] = True
-
-                            st.success("Data extracted successfully!")
-                            
-                            # Show debug info if enabled
-                            if debug_mode:
-                                st.warning("🐛 **Debug Mode Enabled**")
-                                with st.expander("📝 View OCR Text Output", expanded=True):
-                                    ocr_text = extracted_data.get('_debug_ocr_text', 'No OCR text available')
-                                    st.text(ocr_text)
+                            else:
+                                st.error("pydicom not installed")
+                        except Exception as e:
+                            st.error(f"Error: {str(e)}")
+                    
                     else:
-                        st.warning("pydicom not installed. Cannot preview DICOM metadata.")
-                except Exception as e:
-                    st.error(f"Error reading DICOM: {str(e)}")
-            
-            else:
-                # Handle regular image (JPG, PNG)
-                image = Image.open(uploaded_file)
-                st.image(image, caption="Uploaded Image", use_container_width=True)
-
-                # Extract button
-                if st.button("🔍 Extract Data", type="primary", use_container_width=True):
-                    with st.spinner("Processing image... Please wait."):
-                        # Extract data with debug info if enabled
+                        image = Image.open(uploaded_file)
                         debug_mode = st.session_state.get('debug_ocr', False)
                         extracted_data = extractor.extract_from_pil_image(image, return_debug=debug_mode)
-
-                        # Store in session state
+                    
+                    if extracted_data:
                         st.session_state['extracted_data'] = extracted_data
                         st.session_state['image_uploaded'] = True
-                        st.session_state['is_dicom'] = False
-
-                    st.success("Data extracted successfully!")
-                    
-                    # Show debug info if enabled
-                    if debug_mode:
-                        st.warning("🐛 **Debug Mode Enabled**")
-                        with st.expander("📝 View OCR Text Output", expanded=True):
-                            ocr_text = extracted_data.get('_debug_ocr_text', 'No OCR text available')
-                            st.text(ocr_text)
-                        
-                        with st.expander("📋 Helical Lines Detected"):
-                            helical_lines = extracted_data.get('_debug_helical_lines', [])
-                            if helical_lines:
-                                for i, line in enumerate(helical_lines):
-                                    st.text(f"Line {i+1}: {line}")
-                            else:
-                                st.warning("No Helical lines detected in OCR text")
-                        
-                        st.info(f"""
-                        **Extraction Summary:**
-                        - CTDIvol: `{extracted_data.get('ctdi_vol', 'Not detected')}` mGy
-                        - Total DLP: `{extracted_data.get('total_dlp', 'Not detected')}` mGy·cm
-                        - Helical lines found: {len(extracted_data.get('_debug_helical_lines', []))}
-                        """)
-    
-    with col2:
-        st.header("📋 Extracted Data")
+                        st.success("✅ Extraction complete!")
         
+        # Step 2: Review Extracted Data
         if 'extracted_data' in st.session_state and st.session_state.get('image_uploaded', False):
+            st.markdown("---")
+            st.markdown("### 👁️ Step 2: Review Extracted Data")
+            
             data = st.session_state['extracted_data']
             
-            # Display extracted data in cards
-            st.markdown("##### Patient Information")
+            # Clean card layout
+            col_p1, col_p2, col_p3 = st.columns(3)
+            with col_p1:
+                st.markdown(f"""
+                    <div class="data-card">
+                        <div class="card-label">👤 Patient Name</div>
+                        <div class="card-value">{data.get('nama_pasien', 'Not detected')}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                st.markdown(f"""
+                    <div class="data-card">
+                        <div class="card-label">🆔 Patient ID</div>
+                        <div class="card-value">{data.get('id_pasien', 'Not detected')}</div>
+                    </div>
+                """, unsafe_allow_html=True)
             
-            c1, c2 = st.columns(2)
-            with c1:
-                st.info(f"**Nama Pasien:** {data.get('nama_pasien', 'Not detected')}")
-                st.info(f"**Tanggal Pemeriksaan:** {data.get('tanggal_pemeriksaan', 'Not detected')}")
-                st.info(f"**ID Pasien:** {data.get('id_pasien', 'Not detected')}")
-                st.info(f"**Umur Pasien:** {data.get('umur_pasien', 'Not detected')}")
-                st.info(f"**Jenis Kelamin:** {data.get('jenis_kelamin', 'Not detected')}")
+            with col_p2:
+                st.markdown(f"""
+                    <div class="data-card">
+                        <div class="card-label">📅 Examination Date</div>
+                        <div class="card-value">{data.get('tanggal_pemeriksaan', 'Not detected')}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                st.markdown(f"""
+                    <div class="data-card">
+                        <div class="card-label">🔬 Exam Type</div>
+                        <div class="card-value">{data.get('jenis_pemeriksaan', 'Not detected')}</div>
+                    </div>
+                """, unsafe_allow_html=True)
             
-            with c2:
-                st.info(f"**Jenis Pemeriksaan:** {data.get('jenis_pemeriksaan', 'Not detected')}")
-                st.info(f"**Tegangan (kV):** {data.get('kv', 'Not detected')}")
-                st.warning(f"**CTDIvol:** {data.get('ctdi_vol', 'Not detected')} mGy")
-                st.error(f"**Total DLP:** {data.get('total_dlp', 'Not detected')} mGy·cm")
+            with col_p3:
+                st.markdown(f"""
+                    <div class="data-card">
+                        <div class="card-label">⚡ CTDIvol</div>
+                        <div class="card-value" style="color: #ea580c;">{data.get('ctdi_vol', 'Not detected')} mGy</div>
+                    </div>
+                """, unsafe_allow_html=True)
+                st.markdown(f"""
+                    <div class="data-card">
+                        <div class="card-label">📊 Total DLP</div>
+                        <div class="card-value" style="color: #dc2626;">{data.get('total_dlp', 'Not detected')} mGy·cm</div>
+                    </div>
+                """, unsafe_allow_html=True)
             
-            st.divider()
+            # Additional info
+            col_add1, col_add2, col_add3 = st.columns(3)
+            with col_add1:
+                st.markdown(f"""
+                    <div class="data-card">
+                        <div class="card-label">🎂 Age</div>
+                        <div class="card-value">{data.get('umur_pasien', 'N/A')}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+            with col_add2:
+                st.markdown(f"""
+                    <div class="data-card">
+                        <div class="card-label">⚧ Sex</div>
+                        <div class="card-value">{data.get('jenis_kelamin', 'N/A')}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+            with col_add3:
+                st.markdown(f"""
+                    <div class="data-card">
+                        <div class="card-label">⚡ kV</div>
+                        <div class="card-value">{data.get('kv', 'N/A')}</div>
+                    </div>
+                """, unsafe_allow_html=True)
             
-            # Save to Excel button
-            col_save, col_view = st.columns([1, 1])
+            # Save action
+            st.markdown("---")
+            st.markdown("### 💾 Step 3: Save to Excel")
             
-            with col_save:
-                if st.button("💾 Save to Excel", type="primary", use_container_width=True):
+            col_save1, col_save2 = st.columns([1, 3])
+            with col_save1:
+                if st.button("💾 Save Record", type="primary", use_container_width=True):
                     try:
                         row_num = excel_handler.add_record(data)
-                        st.success(f"✅ Data saved to Rekap.xlsx (Row {row_num + 1})")
+                        st.success(f"✅ Saved to row {row_num + 1}")
                         
-                        # Clear session state after saving
+                        # Clear session
                         st.session_state['extracted_data'] = None
                         st.session_state['image_uploaded'] = False
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Error saving data: {str(e)}")
-            
-            with col_view:
-                if st.button("📊 View Excel Data", use_container_width=True):
-                    st.session_state['show_excel'] = True
-        
-        else:
-            st.info("👆 Upload an image and click 'Extract Data' to see results here")
-            
-            # Sample display structure
-            st.markdown("##### Expected Output:")
-            st.markdown("""
-            - **Nama Pasien:** Patient name from scan
-            - **Tanggal Pemeriksaan:** Examination date
-            - **ID Pasien:** Patient ID number
-            - **Umur Pasien:** Patient age
-            - **Jenis Kelamin:** Patient sex
-            - **Jenis Pemeriksaan:** Exam description/type
-            - **Tegangan (kV):** Tube voltage
-            - **CTDIvol:** Radiation dose value (mGy)
-            - **Total DLP:** Total dose value (mGy·cm)
-            """)
+                        st.error(f"Error: {str(e)}")
     
-    # Excel data viewer section - Always visible
-    st.divider()
-    st.header("📊 Data Preview & Download")
+    else:
+        # No file uploaded - show placeholder
+        st.markdown("""
+            <div style="text-align: center; padding: 3rem; background: white; border-radius: 10px; border: 2px dashed #e2e8f0;">
+                <p style="font-size: 3rem; margin: 0;">📄</p>
+                <p style="color: #64748b; margin: 0.5rem 0;">Upload a CT scan dose report image to begin</p>
+            </div>
+        """, unsafe_allow_html=True)
     
-    # Show data preview
+    # Excel Data Section
+    st.markdown("---")
+    st.markdown("### 📊 Saved Records")
+    
     records = excel_handler.get_all_records()
     
     if records:
-        # Display statistics
-        col_stats1, col_stats2, col_stats3 = st.columns(3)
-        with col_stats1:
-            st.metric("Total Records", len(records))
-        with col_stats2:
-            unique_patients = len(set(r.get('Nama Pasien', '') for r in records if r.get('Nama Pasien')))
-            st.metric("Unique Patients", unique_patients)
-        with col_stats3:
-            unique_exams = len(set(r.get('Jenis Pemeriksaan', '') for r in records if r.get('Jenis Pemeriksaan')))
-            st.metric("Exam Types", unique_exams)
-        
-        st.divider()
-        
-        # Data table with search
-        st.subheader("📋 Saved Records")
-        
-        # Search functionality
-        search_term = st.text_input("🔍 Search", placeholder="Search by patient name, exam type, or ID...")
+        # Search
+        search_term = st.text_input("", placeholder="🔍 Search by patient name, exam type, or ID...", label_visibility="collapsed")
         
         if search_term:
-            filtered_records = [
+            filtered = [
                 r for r in records 
                 if search_term.lower() in str(r.get('Nama Pasien', '')).lower()
                 or search_term.lower() in str(r.get('Jenis Pemeriksaan', '')).lower()
                 or search_term.lower() in str(r.get('ID Pasien', '')).lower()
             ]
-            if filtered_records:
-                st.success(f"Found {len(filtered_records)} record(s) matching '{search_term}'")
-                st.dataframe(filtered_records, use_container_width=True, hide_index=True)
+            if filtered:
+                st.success(f"Found {len(filtered)} record(s)")
+                st.dataframe(filtered, use_container_width=True, hide_index=True)
             else:
-                st.warning(f"No records found matching '{search_term}'")
-                st.dataframe(records, use_container_width=True, hide_index=True)
+                st.warning("No matching records")
         else:
             st.dataframe(records, use_container_width=True, hide_index=True)
         
-        st.divider()
-        
-        # Download section
-        st.subheader("📥 Download Options")
-        
+        # Download buttons
+        st.markdown("---")
         col_dl1, col_dl2 = st.columns(2)
         
         with col_dl1:
             with open("Rekap.xlsx", "rb") as file:
                 st.download_button(
-                    label="📥 Download Excel (.xlsx)",
+                    label="📥 Download Excel",
                     data=file,
-                    file_name=f"Rekap_{st.session_state.get('download_timestamp', '')}.xlsx" if st.session_state.get('download_timestamp') else "Rekap.xlsx",
+                    file_name="Rekap.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     use_container_width=True
                 )
         
         with col_dl2:
-            # CSV download option
             import csv
-            import io
+            csv_buffer = io.StringIO()
+            fieldnames = list(records[0].keys())
+            writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(records)
             
-            if records:
-                # Convert to CSV
-                csv_buffer = io.StringIO()
-                if records:
-                    fieldnames = list(records[0].keys())
-                    writer = csv.DictWriter(csv_buffer, fieldnames=fieldnames)
-                    writer.writeheader()
-                    writer.writerows(records)
-                
-                st.download_button(
-                    label="📄 Download CSV (.csv)",
-                    data=csv_buffer.getvalue(),
-                    file_name="Rekap.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
+            st.download_button(
+                label="📄 Download CSV",
+                data=csv_buffer.getvalue(),
+                file_name="Rekap.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
     else:
-        st.info("📭 No data in Excel file yet. Upload an image and extract data to get started.")
+        st.info("📭 No records yet. Upload and extract your first CT scan report.")
     
     # Footer
-    st.divider()
+    st.markdown("---")
     st.markdown(
         """
-        <div style='text-align: center; color: #666; padding: 1rem;'>
-            <p>Built with Streamlit | OCR powered by Tesseract</p>
+        <div style='text-align: center; color: #94a3b8; padding: 1rem; font-size: 0.875rem;'>
+            <p>Radiation Dose Recorder • Built with Streamlit • OCR by Tesseract</p>
+            <p>AKTUALISASI LATSAR CPNS 2026</p>
+            <p>by Abdurrahman Wahid, ST</p>
         </div>
         """,
         unsafe_allow_html=True
     )
+    
+    # Close theme wrapper
+    st.markdown('</div>', unsafe_allow_html=True)
 
 
 if __name__ == "__main__":
