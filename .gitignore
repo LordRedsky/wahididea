@@ -53,4 +53,8 @@ temp_*.png
 
 # Environment variables
 .env
-"*.png"  
+*.png
+*.jpg
+*.jpeg
+*.bmp
+*.tiff

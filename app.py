@@ -18,6 +18,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 import numpy as np
+from utils import convert_date, extract_from_dicom_text, load_css
 
 try:
     import pydicom
@@ -44,476 +45,7 @@ if 'theme' not in st.session_state:
 if 'page' not in st.session_state:
     st.session_state['page'] = 'dashboard'
 
-# Custom CSS - Clean Medical Theme with Dark Mode Support & Mobile Responsive
-st.markdown("""
-    <style>
-    /* Light Mode - Default (always active with !important to override Streamlit) */
-    .main {
-        background-color: #f8fafc !important;
-    }
-
-    .app-header {
-        background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
-    }
-
-    .app-title {
-        color: white !important;
-    }
-
-    .app-subtitle {
-        color: #e0f2fe !important;
-    }
-
-    .data-card {
-        background: white !important;
-        border: 1px solid #e2e8f0 !important;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
-    }
-
-    .card-label {
-        color: #64748b !important;
-    }
-
-    .card-value {
-        color: #0f172a !important;
-    }
-
-    .upload-section {
-        background: white !important;
-        border: 1px solid #e2e8f0 !important;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
-    }
-
-    .metric-card {
-        background: white !important;
-        border: 1px solid #e2e8f0 !important;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
-    }
-
-    /* Dark Mode - Only active when .dark class is present */
-    .dark .main {
-        background-color: #0f172a !important;
-    }
-
-    .dark .app-header {
-        background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
-    }
-
-    .dark .app-title {
-        color: #f8fafc !important;
-    }
-
-    .dark .app-subtitle {
-        color: #bfdbfe !important;
-    }
-
-    .dark .data-card {
-        background: #1e293b !important;
-        border: 1px solid #334155 !important;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
-    }
-
-    .dark .card-label {
-        color: #94a3b8 !important;
-    }
-
-    .dark .card-value {
-        color: #f1f5f9 !important;
-    }
-
-    .dark .upload-section {
-        background: #1e293b !important;
-        border: 1px solid #334155 !important;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
-    }
-
-    .dark .metric-card {
-        background: #1e293b !important;
-        border: 1px solid #334155 !important;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
-    }
-
-    /* Common styles */
-    .app-header {
-        text-align: center;
-        padding: 2rem 0;
-        border-radius: 12px;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-    }
-    
-    .app-title {
-        font-size: 2.5rem;
-        font-weight: 700;
-        margin: 0;
-        letter-spacing: -0.5px;
-    }
-    
-    .app-subtitle {
-        font-size: 1.1rem;
-        margin: 0.5rem 0 0 0;
-        font-weight: 400;
-    }
-    
-    .data-card {
-        border-radius: 10px;
-        padding: 1.5rem;
-        margin-bottom: 1rem;
-    }
-    
-    .card-label {
-        font-size: 0.875rem;
-        font-weight: 500;
-        margin-bottom: 0.25rem;
-    }
-    
-    .card-value {
-        font-size: 1.125rem;
-        font-weight: 600;
-    }
-    
-    .upload-section {
-        border-radius: 10px;
-        padding: 2rem;
-    }
-    
-    .metric-card {
-        border-radius: 8px;
-        padding: 1rem;
-        text-align: center;
-    }
-    
-    /* Hide default Streamlit elements for cleaner look */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    
-    /* Button styling */
-    .stButton>button {
-        border-radius: 8px;
-        font-weight: 500;
-    }
-    
-    /* Dataframe styling */
-    .dataframe {
-        border-radius: 8px;
-        overflow: hidden;
-    }
-    
-    /* Theme toggle button */
-    .theme-toggle {
-        position: fixed;
-        top: 1rem;
-        right: 1rem;
-        z-index: 1000;
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        border-radius: 50px;
-        padding: 0.5rem 1rem;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-    
-    .theme-toggle:hover {
-        background: rgba(255, 255, 255, 0.2);
-        transform: scale(1.05);
-    }
-    
-    .dark .theme-toggle {
-        background: rgba(30, 41, 59, 0.8);
-        border: 1px solid rgba(100, 116, 139, 0.3);
-    }
-    
-    .dark .theme-toggle:hover {
-        background: rgba(30, 41, 59, 0.9);
-    }
-    
-    /* Mobile Responsive Design */
-    @media (max-width: 768px) {
-        .app-header {
-            padding: 1.5rem 1rem;
-            margin-bottom: 1rem;
-            border-radius: 8px;
-        }
-        
-        .app-title {
-            font-size: 1.75rem;
-            letter-spacing: 0;
-        }
-        
-        .app-subtitle {
-            font-size: 0.9rem;
-            padding: 0 0.5rem;
-        }
-        
-        .metric-card {
-            padding: 0.75rem;
-            margin-bottom: 0.5rem;
-        }
-        
-        .metric-card > div:first-child {
-            font-size: 0.75rem !important;
-        }
-        
-        .metric-card > div:last-child {
-            font-size: 1.5rem !important;
-        }
-        
-        .data-card {
-            padding: 1rem;
-            margin-bottom: 0.75rem;
-        }
-        
-        .card-label {
-            font-size: 0.75rem;
-        }
-        
-        .card-value {
-            font-size: 1rem;
-        }
-        
-        .upload-section {
-            padding: 1rem;
-        }
-        
-        /* Make columns stack on mobile */
-        .stColumn > div {
-            margin-bottom: 0.5rem;
-        }
-        
-        /* Better touch targets for mobile */
-        .stButton>button {
-            min-height: 44px;
-            padding: 0.75rem 1rem;
-        }
-        
-        /* Improve file uploader on mobile */
-        .stFileUploader > div {
-            min-height: 100px;
-        }
-        
-        /* Make text inputs more touch-friendly */
-        .stTextInput input,
-        .stTextArea textarea {
-            font-size: 16px !important; /* Prevents zoom on iOS */
-        }
-        
-        /* Better spacing for sections */
-        h3 {
-            font-size: 1.25rem !important;
-            margin-top: 1rem !important;
-            margin-bottom: 0.5rem !important;
-        }
-        
-        /* Optimize data table for mobile */
-        .dataframe {
-            font-size: 0.875rem;
-        }
-        
-        /* Make download buttons full width on mobile */
-        .stDownloadButton>button {
-            width: 100%;
-            min-height: 44px;
-        }
-    }
-    
-    /* Tablet optimizations */
-    @media (min-width: 769px) and (max-width: 1024px) {
-        .app-title {
-            font-size: 2rem;
-        }
-        
-        .app-subtitle {
-            font-size: 1rem;
-        }
-        
-        .metric-card {
-            padding: 0.875rem;
-        }
-    }
-    
-    /* Ensure smooth transitions */
-    * {
-        transition: background-color 0.3s ease, color 0.3s ease;
-    }
-    
-    /* Prevent horizontal scroll */
-    .block-container {
-        max-width: 100%;
-        padding-left: 1rem;
-        padding-right: 1rem;
-    }
-    
-    @media (min-width: 1200px) {
-        .block-container {
-            max-width: 1200px;
-            padding-left: 2rem;
-            padding-right: 2rem;
-        }
-    }
-    </style>
-""", unsafe_allow_html=True)
-
-
-def convert_date(study_date):
-    """Convert DICOM date format (YYYYMMDD) to DD Mon YYYY"""
-    if not study_date or len(study_date) != 8:
-        return study_date
-    
-    try:
-        year = study_date[0:4]
-        month = study_date[4:6]
-        day = study_date[6:8]
-        
-        month_names = {
-            '01': 'Jan', '02': 'Feb', '03': 'Mar', '04': 'Apr',
-            '05': 'Mei', '06': 'Jun', '07': 'Jul', '08': 'Agu',
-            '09': 'Sep', '10': 'Okt', '11': 'Nov', '12': 'Des'
-        }
-        month_name = month_names.get(month, month)
-        return f"{day} {month_name} {year}"
-    except Exception:
-        return study_date
-
-
-def extract_from_dicom_text(txt_content):
-    """Extract data from DICOM text dump format"""
-    result = {
-        'nama_pasien': None,
-        'tanggal_pemeriksaan': None,
-        'id_pasien': None,
-        'umur_pasien': None,
-        'jenis_kelamin': None,
-        'jenis_pemeriksaan': None,
-        'kv': None,
-        'ctdi_vol': None,
-        'total_dlp': None,
-    }
-    
-    lines = txt_content.split('\n')
-    full_text = '\n'.join(lines)
-    
-    # Extract Patient Name - look for (0010,0010) Patient Name
-    for line in lines:
-        if '(0010,0010)' in line and 'Patient Name' in line:
-            # Format: (0010,0010)       Patient Name                        PN  1   16         ABDUL RAHMAN. TN
-            match = re.search(r'\(0010,0010\).*?PN\s+\d+\s+(\d+)\s+(.+?)(?:\n|$)', line)
-            if match:
-                name = match.group(2).strip()
-                if name and len(name) > 2:
-                    result['nama_pasien'] = name
-                    break
-    
-    # Extract Patient ID - look for (0010,0020) Patient ID
-    for line in lines:
-        if '(0010,0020)' in line and 'Patient ID' in line:
-            match = re.search(r'\(0010,0020\).*?LO\s+\d+\s+(\d+)\s+(.+?)(?:\n|$)', line)
-            if match:
-                pid = match.group(2).strip()
-                if pid and pid.isdigit():
-                    result['id_pasien'] = pid
-                    break
-    
-    # Extract Patient Age - look for (0010,1010) Patient Age
-    for line in lines:
-        if '(0010,1010)' in line and 'Patient Age' in line:
-            # Format: (0010,1010)       Patient Age                         AS  1   4          026Y
-            # Match the value at the end of line (number + unit without space)
-            match = re.search(r'\(0010,1010\).*?AS.*?(\d+)([A-Z])\s*$', line)
-            if match:
-                age_num = match.group(1).strip()
-                age_unit = match.group(2).strip()
-                # Store only numeric value for easier data processing
-                if age_unit == 'Y':
-                    result['umur_pasien'] = int(age_num)
-                elif age_unit == 'M':
-                    result['umur_pasien'] = int(age_num)
-                elif age_unit == 'W':
-                    result['umur_pasien'] = int(age_num)
-                elif age_unit == 'D':
-                    result['umur_pasien'] = int(age_num)
-                else:
-                    result['umur_pasien'] = int(age_num)
-                break
-    
-    # Extract Patient Sex - look for (0010,0040) Patient Sex
-    for line in lines:
-        if '(0010,0040)' in line and 'Patient Sex' in line:
-            # Format: (0010,0040)       Patient Sex                         CS  1   2          M
-            match = re.search(r'\(0010,0040\).*?CS\s+\d+\s+(\d+)\s+([A-Z])', line)
-            if match:
-                sex_code = match.group(2).strip()
-                sex_map = {'M': 'Laki-laki', 'F': 'Perempuan', 'U': 'Unknown', 'O': 'Other'}
-                result['jenis_kelamin'] = sex_map.get(sex_code, sex_code)
-                break
-    
-    # Extract Study Date - look for (0008,0020) Study Date
-    for line in lines:
-        if '(0008,0020)' in line and 'Study Date' in line:
-            # Format: (0008,0020)          Study Date                              DA      1       8               20260202
-            match = re.search(r'\(0008,0020\).*?DA\s+\d+\s+\d+\s+(\d{8})', line)
-            if match:
-                date_str = match.group(1).strip()
-                if date_str and len(date_str) == 8:
-                    result['tanggal_pemeriksaan'] = convert_date(date_str)
-                    break
-    
-    # Extract Study Description - look for (0008,1030) Study Description
-    for line in lines:
-        if '(0008,1030)' in line and 'Study Description' in line:
-            match = re.search(r'\(0008,1030\).*?LO\s+\d+\s+\d+\s+(.+?)(?:\n|$)', line)
-            if match:
-                desc = match.group(1).strip()
-                if desc:
-                    result['jenis_pemeriksaan'] = desc
-                    break
-    
-    # Extract kV from (0018,0060) KVP - take the last value (from Helical scan)
-    kv_values = []
-    for line in lines:
-        if '(0018,0060)' in line and 'KVP' in line:
-            # Format: (0018,0060)       KVP                                 DS  1   4          120
-            match = re.search(r'\(0018,0060\).*?DS\s+\d+\s+(\d+)\s+(\d+)', line)
-            if match:
-                kv_values.append(match.group(2).strip())
-    if kv_values:
-        result['kv'] = kv_values[-1]  # Take the last value (usually from Helical)
-    
-    # Extract CTDIvol from (0018,9345) CTDIvol - get all values and take max
-    # There can be multiple CTDIvol values in the Exposure Dose Sequence
-    ctdi_values = []
-    for line in lines:
-        if '(0018,9345)' in line and 'CTD' in line.upper():
-            # Match the numeric value at the end of the line (after all the tabs/spaces)
-            # Format: (0018,9345)    CTD Ivol    FD  1  8  44.38
-            match = re.search(r'\(0018,9345\).*?FD\s+\d+\s+\d+\s+([\d\.]+)', line)
-            if match:
-                try:
-                    val = float(match.group(1).strip())
-                    if val > 0:
-                        ctdi_values.append(val)
-                except (ValueError, TypeError):
-                    pass
-    if ctdi_values:
-        result['ctdi_vol'] = str(max(ctdi_values))  # Take highest value (usually from Helical)
-    
-    # Extract Total DLP from Comments On Radiation Dose (0040,0310)
-    total_dlp_match = re.search(r'TotalDLP[=:\s]*([\d\.]+)', full_text)
-    if total_dlp_match:
-        result['total_dlp'] = total_dlp_match.group(1)
-    
-    # If Total DLP not found, sum individual DLP events
-    if not result['total_dlp']:
-        dlp_events = re.findall(r'Event[=:\s]*\d+\s+DLP[=:\s]*([\d\.]+)', full_text)
-        if dlp_events:
-            total = sum(float(d) for d in dlp_events)
-            result['total_dlp'] = str(round(total, 2))
-    
-    return result
-
+st.markdown(load_css('style.css'), unsafe_allow_html=True)
 
 def prepare_dashboard_data(records):
     """Prepare data for dashboard visualization"""
@@ -732,15 +264,45 @@ def render_dashboard():
         else:
             st.info("No dose data available")
     
-    # Data Table
+    # Data Table and Management
     st.markdown("---")
-    st.markdown("### 📋 Patient Data Table")
+    col_t1, col_t2 = st.columns([4, 1])
+    with col_t1:
+        st.markdown("### 📋 Patient Data Table")
+    with col_t2:
+        if st.button("🗑️ Clear All", type="secondary", use_container_width=True, help="Hapus semua data"):
+            st.session_state['confirm_delete_all'] = True
     
+    if st.session_state.get('confirm_delete_all'):
+        st.warning("⚠️ Apakah Anda yakin ingin menghapus SELURUH data? Tindakan ini tidak dapat dibatalkan.")
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            if st.button("✅ Ya, Hapus Semua", type="primary", use_container_width=True):
+                excel_handler.clear_all_data()
+                st.session_state['confirm_delete_all'] = False
+                st.success("Data berhasil dikosongkan.")
+                st.rerun()
+        with col_c2:
+            if st.button("❌ Batal", use_container_width=True):
+                st.session_state['confirm_delete_all'] = False
+                st.rerun()
+
     # Show only relevant columns
-    display_cols = ['Nama Pasien', 'Jenis Kelamin', 'Umur Pasien', 'Jenis Pemeriksaan', 'CTDIvol', 'Total DLP']
+    display_cols = ['No', 'Nama Pasien', 'Jenis Kelamin', 'Umur Pasien', 'Jenis Pemeriksaan', 'CTDIvol', 'Total DLP']
     display_df = filtered_df[[c for c in display_cols if c in filtered_df.columns]]
     
     st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+    # Individual Deletion Section
+    with st.expander("🗑️ Hapus Data Individu"):
+        st.write("Pilih data yang ingin dihapus berdasarkan nomor urut (No):")
+        no_to_delete = st.number_input("Masukkan nomor (No)", min_value=1, max_value=int(df['No'].max()) if not df.empty else 1, step=1)
+        if st.button("🗑️ Hapus Record Ini", type="secondary"):
+            if excel_handler.delete_record(int(no_to_delete)):
+                st.success(f"Record No {no_to_delete} berhasil dihapus.")
+                st.rerun()
+            else:
+                st.error("Gagal menghapus record. Pastikan nomor benar.")
 
 
 def render_upload_page():
@@ -989,6 +551,17 @@ def render_upload_page():
                 st.warning("No matching records")
         else:
             st.dataframe(records, use_container_width=True, hide_index=True)
+        
+        # Individual Deletion in Upload Page
+        with st.expander("🗑️ Hapus Data Individu"):
+            st.write("Masukkan nomor urut (No) dari tabel di atas untuk menghapus:")
+            del_no = st.number_input("No Record", min_value=1, key="del_no_upload")
+            if st.button("🗑️ Hapus", key="del_btn_upload"):
+                if excel_handler.delete_record(int(del_no)):
+                    st.success(f"Record {del_no} dihapus.")
+                    st.rerun()
+                else:
+                    st.error("Gagal menghapus.")
         
         # Download buttons
         st.markdown("---")

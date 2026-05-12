@@ -150,10 +150,37 @@ class ExcelHandler:
         Returns:
             Number of records added
         """
+        if not records:
+            return 0
+            
+        wb = load_workbook(self.filename)
+        ws = wb.active
+        
+        next_row = ws.max_row + 1
         count = 0
-        for record in records:
-            self.add_record(record)
+        
+        for data in records:
+            record = [
+                next_row - 1,  # No (sequential)
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),  # Tanggal Upload
+                data.get('nama_pasien', ''),
+                data.get('tanggal_pemeriksaan', ''),
+                data.get('id_pasien', ''),
+                data.get('umur_pasien', ''),
+                data.get('jenis_kelamin', ''),
+                data.get('jenis_pemeriksaan', ''),
+                data.get('kv', ''),
+                data.get('ctdi_vol', ''),
+                data.get('total_dlp', '')
+            ]
+            
+            for col, value in enumerate(record, 1):
+                ws.cell(row=next_row, column=col, value=value)
+                
+            next_row += 1
             count += 1
+            
+        wb.save(self.filename)
         return count
     
     def get_all_records(self) -> List[Dict]:
@@ -187,11 +214,39 @@ class ExcelHandler:
         if not os.path.exists(self.filename):
             return
         
+        # Create a fresh file with headers
+        self._create_new_excel()
+
+    def delete_record(self, no_value: int) -> bool:
+        """
+        Delete a specific record by its 'No' value
+        
+        Args:
+            no_value: The value in the 'No' column to match
+            
+        Returns:
+            True if record was found and deleted, False otherwise
+        """
+        if not os.path.exists(self.filename):
+            return False
+            
         wb = load_workbook(self.filename)
         ws = wb.active
         
-        # Delete all rows except header
-        for row in range(ws.max_row, 1, -1):
-            ws.delete_rows(row)
-
-        wb.save(self.filename)
+        found = False
+        # No is in the first column (column 1)
+        for row in range(2, ws.max_row + 1):
+            if ws.cell(row=row, column=1).value == no_value:
+                ws.delete_rows(row)
+                found = True
+                break
+        
+        if found:
+            # Re-index the remaining rows
+            for row in range(2, ws.max_row + 1):
+                ws.cell(row=row, column=1).value = row - 1
+            
+            wb.save(self.filename)
+            return True
+            
+        return False

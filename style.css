@@ -1,0 +1,307 @@
+/* Light Mode - Default (always active with !important to override Streamlit) */
+.main {
+    background-color: #f8fafc !important;
+}
+
+.app-header {
+    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%) !important;
+}
+
+.app-title {
+    color: white !important;
+}
+
+.app-subtitle {
+    color: #e0f2fe !important;
+}
+
+.data-card {
+    background: white !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+.card-label {
+    color: #64748b !important;
+}
+
+.card-value {
+    color: #0f172a !important;
+}
+
+.upload-section {
+    background: white !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+.metric-card {
+    background: white !important;
+    border: 1px solid #e2e8f0 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
+}
+
+/* Dark Mode - Only active when .dark class is present */
+.dark .main {
+    background-color: #0f172a !important;
+}
+
+.dark .app-header {
+    background: linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%) !important;
+}
+
+.dark .app-title {
+    color: #f8fafc !important;
+}
+
+.dark .app-subtitle {
+    color: #bfdbfe !important;
+}
+
+.dark .data-card {
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+.dark .card-label {
+    color: #94a3b8 !important;
+}
+
+.dark .card-value {
+    color: #f1f5f9 !important;
+}
+
+.dark .upload-section {
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+}
+
+.dark .metric-card {
+    background: #1e293b !important;
+    border: 1px solid #334155 !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Common styles */
+.app-header {
+    text-align: center;
+    padding: 2rem 0;
+    border-radius: 12px;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.app-title {
+    font-size: 2.5rem;
+    font-weight: 700;
+    margin: 0;
+    letter-spacing: -0.5px;
+}
+
+.app-subtitle {
+    font-size: 1.1rem;
+    margin: 0.5rem 0 0 0;
+    font-weight: 400;
+}
+
+.data-card {
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.card-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.card-value {
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+.upload-section {
+    border-radius: 10px;
+    padding: 2rem;
+}
+
+.metric-card {
+    border-radius: 8px;
+    padding: 1rem;
+    text-align: center;
+}
+
+/* Hide default Streamlit elements for cleaner look */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+
+/* Button styling */
+.stButton>button {
+    border-radius: 8px;
+    font-weight: 500;
+}
+
+/* Dataframe styling */
+.dataframe {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Theme toggle button */
+.theme-toggle {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 1000;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 50px;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.theme-toggle:hover {
+    background: rgba(255, 255, 255, 0.2);
+    transform: scale(1.05);
+}
+
+.dark .theme-toggle {
+    background: rgba(30, 41, 59, 0.8);
+    border: 1px solid rgba(100, 116, 139, 0.3);
+}
+
+.dark .theme-toggle:hover {
+    background: rgba(30, 41, 59, 0.9);
+}
+
+/* Mobile Responsive Design */
+@media (max-width: 768px) {
+    .app-header {
+        padding: 1.5rem 1rem;
+        margin-bottom: 1rem;
+        border-radius: 8px;
+    }
+    
+    .app-title {
+        font-size: 1.75rem;
+        letter-spacing: 0;
+    }
+    
+    .app-subtitle {
+        font-size: 0.9rem;
+        padding: 0 0.5rem;
+    }
+    
+    .metric-card {
+        padding: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    .metric-card > div:first-child {
+        font-size: 0.75rem !important;
+    }
+    
+    .metric-card > div:last-child {
+        font-size: 1.5rem !important;
+    }
+    
+    .data-card {
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+    }
+    
+    .card-label {
+        font-size: 0.75rem;
+    }
+    
+    .card-value {
+        font-size: 1rem;
+    }
+    
+    .upload-section {
+        padding: 1rem;
+    }
+    
+    /* Make columns stack on mobile */
+    .stColumn > div {
+        margin-bottom: 0.5rem;
+    }
+    
+    /* Better touch targets for mobile */
+    .stButton>button {
+        min-height: 44px;
+        padding: 0.75rem 1rem;
+    }
+    
+    /* Improve file uploader on mobile */
+    .stFileUploader > div {
+        min-height: 100px;
+    }
+    
+    /* Make text inputs more touch-friendly */
+    .stTextInput input,
+    .stTextArea textarea {
+        font-size: 16px !important; /* Prevents zoom on iOS */
+    }
+    
+    /* Better spacing for sections */
+    h3 {
+        font-size: 1.25rem !important;
+        margin-top: 1rem !important;
+        margin-bottom: 0.5rem !important;
+    }
+    
+    /* Optimize data table for mobile */
+    .dataframe {
+        font-size: 0.875rem;
+    }
+    
+    /* Make download buttons full width on mobile */
+    .stDownloadButton>button {
+        width: 100%;
+        min-height: 44px;
+    }
+}
+
+/* Tablet optimizations */
+@media (min-width: 769px) and (max-width: 1024px) {
+    .app-title {
+        font-size: 2rem;
+    }
+    
+    .app-subtitle {
+        font-size: 1rem;
+    }
+    
+    .metric-card {
+        padding: 0.875rem;
+    }
+}
+
+/* Ensure smooth transitions */
+* {
+    transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Prevent horizontal scroll */
+.block-container {
+    max-width: 100%;
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+@media (min-width: 1200px) {
+    .block-container {
+        max-width: 1200px;
+        padding-left: 2rem;
+        padding-right: 2rem;
+    }
+}
