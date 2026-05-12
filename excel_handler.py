@@ -230,23 +230,34 @@ class ExcelHandler:
         if not os.path.exists(self.filename):
             return False
             
-        wb = load_workbook(self.filename)
-        ws = wb.active
-        
-        found = False
-        # No is in the first column (column 1)
-        for row in range(2, ws.max_row + 1):
-            if ws.cell(row=row, column=1).value == no_value:
-                ws.delete_rows(row)
-                found = True
-                break
-        
-        if found:
-            # Re-index the remaining rows
+        try:
+            wb = load_workbook(self.filename)
+            ws = wb.active
+            
+            found = False
+            # No is in the first column (column 1)
+            # We iterate backwards to safely delete while looping if needed, 
+            # though we break after the first find anyway.
             for row in range(2, ws.max_row + 1):
-                ws.cell(row=row, column=1).value = row - 1
+                cell_value = ws.cell(row=row, column=1).value
+                # Handle potential type mismatches (e.g. if Excel stored it as string)
+                try:
+                    if int(cell_value) == int(no_value):
+                        ws.delete_rows(row)
+                        found = True
+                        break
+                except (ValueError, TypeError):
+                    continue
             
-            wb.save(self.filename)
-            return True
-            
-        return False
+            if found:
+                # Re-index the remaining rows to keep 'No' sequential
+                for row in range(2, ws.max_row + 1):
+                    ws.cell(row=row, column=1).value = row - 1
+                
+                wb.save(self.filename)
+                return True
+                
+            return False
+        except Exception as e:
+            print(f"Error deleting record: {e}")
+            return False

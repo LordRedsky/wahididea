@@ -54,16 +54,24 @@ def prepare_dashboard_data(records):
     
     df = pd.DataFrame(records)
     
-    # Clean and process data
-    if 'Umur Pasien' in df.columns:
+    # Clean and process data - support both short and long header names
+    ctdi_col = 'CTDIvol' if 'CTDIvol' in df.columns else 'CTDIvol (mGy)'
+    dlp_col = 'Total DLP' if 'Total DLP' in df.columns else 'Total DLP (mGy·cm)'
+    age_col = 'Umur Pasien'
+    
+    if age_col in df.columns:
         # Extract numeric age
-        df['Age'] = df['Umur Pasien'].astype(str).str.extract(r'(\d+)').astype(float)
+        df['Age'] = df[age_col].astype(str).str.extract(r'(\d+)').astype(float)
     
-    if 'CTDIvol' in df.columns:
-        df['CTDIvol'] = pd.to_numeric(df['CTDIvol'], errors='coerce')
-    
-    if 'Total DLP' in df.columns:
-        df['Total DLP'] = pd.to_numeric(df['Total DLP'], errors='coerce')
+    if ctdi_col in df.columns:
+        df['CTDIvol_val'] = pd.to_numeric(df[ctdi_col], errors='coerce')
+    else:
+        df['CTDIvol_val'] = 0
+        
+    if dlp_col in df.columns:
+        df['Total_DLP_val'] = pd.to_numeric(df[dlp_col], errors='coerce')
+    else:
+        df['Total_DLP_val'] = 0
     
     return df
 
@@ -153,7 +161,7 @@ def render_dashboard():
             </div>
         """, unsafe_allow_html=True)
     with col_s3:
-        avg_ctdi = filtered_df['CTDIvol'].mean() if 'CTDIvol' in filtered_df.columns and not filtered_df['CTDIvol'].empty else 0
+        avg_ctdi = filtered_df['CTDIvol_val'].mean() if 'CTDIvol_val' in filtered_df.columns and not filtered_df['CTDIvol_val'].empty else 0
         st.markdown(f"""
             <div class="metric-card">
                 <div style="font-size: 0.875rem; color: #64748b;">Avg CTDIvol</div>
@@ -161,7 +169,7 @@ def render_dashboard():
             </div>
         """, unsafe_allow_html=True)
     with col_s4:
-        avg_dlp = filtered_df['Total DLP'].mean() if 'Total DLP' in filtered_df.columns and not filtered_df['Total DLP'].empty else 0
+        avg_dlp = filtered_df['Total_DLP_val'].mean() if 'Total_DLP_val' in filtered_df.columns and not filtered_df['Total_DLP_val'].empty else 0
         st.markdown(f"""
             <div class="metric-card">
                 <div style="font-size: 0.875rem; color: #64748b;">Avg DLP</div>
@@ -240,14 +248,14 @@ def render_dashboard():
     
     with col_c4:
         st.markdown("#### ⚡ CTDIvol vs Total DLP")
-        if 'CTDIvol' in filtered_df.columns and 'Total DLP' in filtered_df.columns:
-            valid_data = filtered_df.dropna(subset=['CTDIvol', 'Total DLP'])
+        if 'CTDIvol_val' in filtered_df.columns and 'Total_DLP_val' in filtered_df.columns:
+            valid_data = filtered_df.dropna(subset=['CTDIvol_val', 'Total_DLP_val'])
             if not valid_data.empty:
                 fig = px.scatter(
                     valid_data,
-                    x='CTDIvol',
-                    y='Total DLP',
-                    size='CTDIvol',
+                    x='CTDIvol_val',
+                    y='Total_DLP_val',
+                    size='CTDIvol_val',
                     color='Jenis Kelamin' if 'Jenis Kelamin' in valid_data.columns else None,
                     hover_data=['Nama Pasien'] if 'Nama Pasien' in valid_data.columns else None,
                     color_discrete_sequence=['#0ea5e9', '#f472b6', '#a78bfa']
@@ -298,7 +306,9 @@ def render_dashboard():
         st.write("Pilih data yang ingin dihapus berdasarkan nomor urut (No):")
         no_to_delete = st.number_input("Masukkan nomor (No)", min_value=1, max_value=int(df['No'].max()) if not df.empty else 1, step=1)
         if st.button("🗑️ Hapus Record Ini", type="secondary"):
-            if excel_handler.delete_record(int(no_to_delete)):
+            if not hasattr(excel_handler, 'delete_record'):
+                st.error("Error: Fungsi penghapusan tidak ditemukan di module Excel. Silakan perbarui file excel_handler.py di server.")
+            elif excel_handler.delete_record(int(no_to_delete)):
                 st.success(f"Record No {no_to_delete} berhasil dihapus.")
                 st.rerun()
             else:
@@ -557,7 +567,9 @@ def render_upload_page():
             st.write("Masukkan nomor urut (No) dari tabel di atas untuk menghapus:")
             del_no = st.number_input("No Record", min_value=1, key="del_no_upload")
             if st.button("🗑️ Hapus", key="del_btn_upload"):
-                if excel_handler.delete_record(int(del_no)):
+                if not hasattr(excel_handler, 'delete_record'):
+                    st.error("Error: Fungsi penghapusan tidak ditemukan di module Excel. Silakan perbarui file excel_handler.py di server.")
+                elif excel_handler.delete_record(int(del_no)):
                     st.success(f"Record {del_no} dihapus.")
                     st.rerun()
                 else:
