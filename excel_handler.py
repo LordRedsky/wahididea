@@ -33,9 +33,25 @@ class ExcelHandler:
         self._initialize_excel()
     
     def _initialize_excel(self):
-        """Initialize Excel file with headers if it doesn't exist"""
+        """Initialize Excel file with headers or dummy data if it doesn't exist"""
         if not os.path.exists(self.filename):
-            self._create_new_excel()
+            # Check if dummy data template exists
+            dummy_path = os.path.join("dummy", "data dummy.xlsx")
+            if os.path.exists(dummy_path):
+                try:
+                    import shutil
+                    # Ensure parent directory exists
+                    dir_name = os.path.dirname(self.filename)
+                    if dir_name and not os.path.exists(dir_name):
+                        os.makedirs(dir_name, exist_ok=True)
+                    
+                    shutil.copy(dummy_path, self.filename)
+                    print(f"Successfully initialized {self.filename} from dummy data: {dummy_path}")
+                except Exception as e:
+                    print(f"Error copying dummy data: {e}")
+                    self._create_new_excel()
+            else:
+                self._create_new_excel()
         else:
             # Check and update headers if needed
             self._update_headers_if_needed()
@@ -236,11 +252,8 @@ class ExcelHandler:
             
             found = False
             # No is in the first column (column 1)
-            # We iterate backwards to safely delete while looping if needed, 
-            # though we break after the first find anyway.
             for row in range(2, ws.max_row + 1):
                 cell_value = ws.cell(row=row, column=1).value
-                # Handle potential type mismatches (e.g. if Excel stored it as string)
                 try:
                     if int(cell_value) == int(no_value):
                         ws.delete_rows(row)

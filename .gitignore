@@ -42,6 +42,7 @@ Thumbs.db
 
 # Excel & Data files
 *.xlsx
+!dummy/*.xlsx
 *.csv
 *.log
 
